@@ -1,0 +1,22 @@
+{
+  "schema_version": 6,
+  "label": "None",
+  "capabilities": {
+    "kline.daily.by_symbol": {
+      "rpm": 60,
+      "batch": 1,
+      "subscribe": null
+    },
+    "kline.daily.batch": {
+      "rpm": 60,
+      "batch": 100,
+      "subscribe": null
+    }
+  },
+  "probe_log": [
+    "无 API Key(无档 · free-api 服务器)"
+  ],
+  "missing_caps": [],
+  "extras_caps": [],
+  "invalid_key": false
+}

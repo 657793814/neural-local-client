@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neuralkb.local/schema/question-pack.v1.json",
+  "title": "Neural Question Pack v1",
+  "description": "个人题库客户端的题目包契约：人看得懂、机器校验得住、图片带得走。",
+  "type": "object",
+  "required": ["questions"],
+  "properties": {
+    "format": {
+      "const": "neural-question-pack",
+      "description": "固定值；缺省时按题目包处理，但建议写上。"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "description": "大于 1 的版本客户端会拒绝，并提示先升级。"
+    },
+    "generatedAt": {"type": "string", "description": "ISO 8601 时间，仅供人看。"},
+    "generator": {"type": "string", "description": "生成者标识，例如 third-party-agent/1.0。"},
+    "subject": {"type": "string", "description": "整包学科名，导入时用于匹配本地学科。"},
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/question"}
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "question": {
+      "type": "object",
+      "required": ["type", "stem", "answer", "examPoints"],
+      "properties": {
+        "clientId": {
+          "type": "string",
+          "description": "UUID；没有则导入时生成，用于幂等与图片命名。"
+        },
+        "type": {
+          "type": "string",
+          "description": "SINGLE / MULTI / FILL / SOLVED；兼容「单选题」等中文别名。",
+          "examples": ["SINGLE", "MULTI", "FILL", "SOLVED", "单选题", "解答题"]
+        },
+        "stem": {
+          "type": "string",
+          "minLength": 1,
+          "description": "题干。公式必须用 $...$ 包裹；Markdown 图片引用会被抽取成附件。"
+        },
+        "options": {
+          "oneOf": [
+            {"$ref": "#/$defs/optionList"},
+            {
+              "type": "string",
+              "description": "紧凑写法，例如 A|4;B|5。",
+              "pattern": "^[^|]+\\|[^;]+(;[^|]+\\|[^;]+)*$"
+            }
+          ]
+        },
+        "answer": {"type": "string", "minLength": 1, "description": "选择题填字母（多选 AC）；其他填答案文本。"},
+        "analysis": {"type": "string"},
+        "difficulty": {"type": "integer", "minimum": 1, "maximum": 5, "default": 3},
+        "examPoints": {
+          "oneOf": [
+            {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "string", "minLength": 1}},
+            {"type": "string", "description": "分号分隔的 1–6 个考察点。"}
+          ]
+        },
+        "tags": {"type": "array", "maxItems": 12, "items": {"type": "string"}},
+        "knowledgePath": {
+          "type": "array",
+          "description": "教材 / 章节 / 知识点路径；匹配不到就留空待归类。",
+          "items": {"type": "string"}
+        },
+        "source": {"type": "string"},
+        "year": {"type": "integer"},
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file"],
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "ZIP 内相对路径；禁止 .. 与绝对路径。",
+                "pattern": "^(?![./])(?!.*\\.\\.)[^\\\\]+$"
+              },
+              "kind": {"enum": ["FIGURE", "PAGE", "CAPTURE"], "default": "FIGURE"},
+              "alt": {"type": "string"}
+            }
+          }
+        },
+        "missingImages": {
+          "type": "array",
+          "description": "智能体无法导出的图片名字，便于客户端提示用户补图。",
+          "items": {"type": "string"}
+        },
+        "review": {"type": "boolean", "description": "标为需人工确认，导入后进「待复核」。"},
+        "reviewNote": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"enum": ["SINGLE", "MULTI", "单选题", "多选题"]}}},
+          "then": {
+            "properties": {"options": {"$ref": "#/$defs/optionList"}},
+            "required": ["options"]
+          }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "optionList": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["key", "text"],
+        "properties": {
+          "key": {"type": "string", "minLength": 1, "maxLength": 2},
+          "text": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

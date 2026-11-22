@@ -1,0 +1,21 @@
+{
+  "name": "@nkb/print-designer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "通用打印模板设计器接入层：零框架依赖，给 Vue/React/jQuery/原生页面共用的 <print-designer> 门面 + 模板转打印 HTML 的出纸链路",
+  "wormPrintVersion": "1.4.8",
+  "main": "./dist/print-designer.js",
+  "module": "./dist/print-designer.esm.js",
+  "files": [
+    "dist",
+    "vendor",
+    "src"
+  ],
+  "scripts": {
+    "sync:vendor": "node sync-vendor.mjs",
+    "build": "node build.mjs",
+    "demo": "node scripts/serve.mjs"
+  },
+  "license": "MIT"
+}

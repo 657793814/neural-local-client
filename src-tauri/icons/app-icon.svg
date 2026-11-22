@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="plate" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#333F68"/>
+      <stop offset="0.55" stop-color="#1C2338"/>
+      <stop offset="1" stop-color="#101524"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="0.5" cy="0.02" r="0.92">
+      <stop offset="0" stop-color="#96AADB" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#96AADB" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="paper" x1="0.25" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.78" stop-color="#FAFCFF"/>
+      <stop offset="1" stop-color="#EBF0F9"/>
+    </linearGradient>
+    <filter id="cast" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="11"/>
+    </filter>
+    <clipPath id="pageL"><path d="M503 368C434 340 328 324 254 326C220 328 204 346 204 374V626C204 654 220 670 254 672C328 688 434 698 503 700Z"/></clipPath>
+    <clipPath id="pageR"><path d="M521 368C590 340 696 324 770 326C804 328 820 346 820 374V626C820 654 804 670 770 672C696 688 590 698 521 700Z"/></clipPath>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#plate)"/>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#spot)"/>
+  <rect x="102" y="102" width="820" height="820" rx="184" fill="none"
+        stroke="#ffffff" stroke-opacity="0.11" stroke-width="3"/>
+
+  <g transform="translate(512 512) scale(0.945 1.055) translate(-512 -513)">
+    <g filter="url(#cast)" fill="#02040a" opacity="0.32" transform="translate(0 11)">
+      <path d="M503 368C434 340 328 324 254 326C220 328 204 346 204 374V626C204 654 220 670 254 672C328 688 434 698 503 700Z"/>
+      <path d="M521 368C590 340 696 324 770 326C804 328 820 346 820 374V626C820 654 804 670 770 672C696 688 590 698 521 700Z"/>
+    </g>
+
+    <g fill="url(#paper)">
+      <path d="M503 368C434 340 328 324 254 326C220 328 204 346 204 374V626C204 654 220 670 254 672C328 688 434 698 503 700Z"/>
+      <path d="M521 368C590 340 696 324 770 326C804 328 820 346 820 374V626C820 654 804 670 770 672C696 688 590 698 521 700Z"/>
+    </g>
+
+    <g clip-path="url(#pageL)">
+      <path d="M204 626C204 654 220 670 254 672C328 688 434 698 503 700" fill="none"
+            stroke="#E2B67B" stroke-width="22" stroke-linecap="round" stroke-opacity="0.95"/>
+    </g>
+    <g clip-path="url(#pageR)">
+      <path d="M820 626C820 654 804 670 770 672C696 688 590 698 521 700" fill="none"
+            stroke="#E2B67B" stroke-width="22" stroke-linecap="round" stroke-opacity="0.95"/>
+    </g>
+  </g>
+</svg>

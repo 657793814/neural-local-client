@@ -1,0 +1,11 @@
+# 第三方试题页面能调用的命令：只能交题，不能读写别的数据。
+
+[[permission]]
+identifier = "allow-browser-collect"
+description = "把页面上抓到的结构化题目交回本地题库"
+commands.allow = ["browser_collect"]
+
+[[permission]]
+identifier = "allow-emit-browser-text"
+description = "结构化抓不到题时把整页文字交回本地题库"
+commands.allow = ["emit_browser_text"]

@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-browser",
+  "description": "内嵌的第三方试题页面只能把抓到的题目和整页文字交回本地题库，不能调用其他命令。",
+  "webviews": ["site"],
+  "local": false,
+  "remote": {
+    "urls": ["http://*:*", "https://*:*"]
+  },
+  "permissions": [
+    "allow-browser-collect",
+    "allow-emit-browser-text"
+  ]
+}

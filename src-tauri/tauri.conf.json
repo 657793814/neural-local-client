@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NeuralKB Local",
+  "version": "0.1.0",
+  "identifier": "com.neuralkb.local",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:5183",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NeuralKB 本地题库",
+        "width": 1240,
+        "height": 840,
+        "minWidth": 1000,
+        "minHeight": 640,
+        "titleBarStyle": "Visible",
+        "dragDropEnabled": true
+      }
+    ],
+    "withGlobalTauri": false,
+    "security": {
+      "csp": "default-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$TEMP/nb-overlay-*"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "category": "Education",
+    "shortDescription": "NeuralKB 本地题库",
+    "longDescription": "离线可用的个人题库：录题、导入、截图识别、AI 出题与归类。数据只存在本机。",
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 }
+      }
+    }
+  }
+}

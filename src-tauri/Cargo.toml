@@ -1,0 +1,60 @@
+[package]
+name = "neuralkb-local"
+version = "0.1.0"
+description = "NeuralKB 个人本地题库客户端（离线 SQLite）"
+authors = ["NeuralKB"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "unstable"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "blocking"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "tiff", "bmp"] }
+sha2 = "0.10"
+argon2 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+base64 = "0.22"
+encoding_rs = "0.8"
+tokio = { version = "1", features = ["time", "sync", "macros"] }
+qrcode = { version = "0.14", features = ["svg"] }
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFBase", "CFCGTypes", "CFURL", "CFString", "CFData", "CFByteOrder", "CFDictionary"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGBase", "CGGeometry", "CGColorSpace", "CGContext", "CGImage", "CGBitmapContext", "CGPDFDocument", "CGPDFPage", "CGDataProvider"] }
+# 本地 OCR：macOS 自带 Vision 的文字识别，离线可用，不需要模型 Key。
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSDictionary", "NSString"] }
+objc2-vision = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "VNGeometry", "VNObservation", "VNRecognizeTextRequest", "VNRequest", "VNRequestHandler", "VNTypes"] }
+
+# 非 macOS 平台的 PDF 渲染（macOS 走 CoreGraphics，不编这层）。
+# Windows 打包需随包携带 pdfium.dll（见 docs/windows-port-plan.md §5）。
+# .rtf 转文字用内置的 rtf_to_text（filein.rs），不引第三方解析器。
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+pdfium-render = "0.8"
+
+[profile.release]
+codegen-units = 1
+# fat LTO 每次重编都要全量链接（实测 ~7 分钟）；thin LTO 链接快得多，
+# 产物体积只多几个 MB，本地打包用这个档更划算。
+lto = "thin"
+opt-level = "s"
+strip = true
+
+# 图片缩放、哈希、ZIP 解压在 dev 下也要够快，否则拖 200 张图进来像卡死。
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

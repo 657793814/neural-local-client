@@ -1,0 +1,103 @@
+{
+  "note": "校验用例：expected=accept 表示应能进入预览，reject 表示整包被拒或单题 INVALID。客户端 Rust 单测与将来共享校验器都以这份为准。",
+  "cases": [
+    {
+      "name": "最小学科包",
+      "expected": "accept",
+      "pack": {
+        "format": "neural-question-pack",
+        "version": 1,
+        "subject": "数学",
+        "questions": [
+          {
+            "type": "FILL",
+            "stem": "若 $a=2$，则 $2a=$ ____。",
+            "answer": "4",
+            "examPoints": ["代数式求值"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "选择题带紧凑选项与中文题型",
+      "expected": "accept",
+      "pack": {
+        "questions": [
+          {
+            "type": "单选题",
+            "stem": "下列哪一个是质数？",
+            "options": "A|4;B|5;C|6",
+            "answer": "B",
+            "difficulty": 1,
+            "examPoints": "质数;数的整除"
+          }
+        ]
+      }
+    },
+    {
+      "name": "带图与知识点路径",
+      "expected": "accept",
+      "pack": {
+        "format": "neural-question-pack",
+        "version": 1,
+        "questions": [
+          {
+            "clientId": "0b0e7f36-7a7e-4d1e-9e2a-3f0f6a0b9c11",
+            "type": "SOLVED",
+            "stem": "如图，求阴影面积。![](images/q1-1.png)",
+            "answer": "$12$",
+            "analysis": "阴影面积等于矩形减去圆。",
+            "difficulty": 3,
+            "examPoints": ["组合图形面积"],
+            "knowledgePath": ["初中数学 · 九年级上册", "第二十二章 二次函数", "二次函数的图象"],
+            "images": [{"file": "images/q1-1.png", "kind": "FIGURE", "alt": "图1"}]
+          }
+        ]
+      }
+    },
+    {
+      "name": "版本过新",
+      "expected": "reject",
+      "reason": "version > 1 时拒绝整包，提示升级客户端",
+      "pack": {"format": "neural-question-pack", "version": 2, "questions": []}
+    },
+    {
+      "name": "题型不认识",
+      "expected": "reject",
+      "reason": "「判断题」不在 SINGLE / MULTI / FILL / SOLVED 内，单题 INVALID",
+      "pack": {"questions": [{"type": "判断题", "stem": "地球是圆的。", "answer": "对", "examPoints": ["常识"]}]}
+    },
+    {
+      "name": "选择题只有一个选项",
+      "expected": "reject",
+      "reason": "选择题至少 2 个选项",
+      "pack": {
+        "questions": [
+          {"type": "SINGLE", "stem": "1+1=?", "options": [{"key": "A", "text": "2"}], "answer": "A", "examPoints": ["加法"]}
+        ]
+      }
+    },
+    {
+      "name": "缺少考察点",
+      "expected": "reject",
+      "reason": "examPoints 必填，1–6 个",
+      "pack": {"questions": [{"type": "FILL", "stem": "3+4=____", "answer": "7"}]}
+    },
+    {
+      "name": "图片路径穿越",
+      "expected": "reject",
+      "reason": "images[].file 含 .. 时该题 INVALID，ZIP 里出现 .. 则整包拒绝",
+      "pack": {
+        "questions": [
+          {
+            "type": "SOLVED",
+            "stem": "看图。",
+            "answer": "1",
+            "examPoints": ["识图"],
+            "images": [{"file": "../../etc/passwd"}]
+          }
+        ]
+      }
+    }
+  ]
+}

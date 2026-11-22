@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>选择题目区域</title>
+  <style>
+    :root {
+      --gold: #e6cf98;
+      --ink: #0b0d12;
+      --panel: rgba(16, 19, 26, .95);
+      --mark: #ff4d4f;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; cursor: crosshair;
+      background: #000;
+      font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+      user-select: none; -webkit-user-select: none;
+    }
+    /* 截图底图用 div 的背景图，不用 <img>：在这条壳的 WKWebView 里，
+       全屏 <img> 不参与合成（连它自己的背景色都不画），换 div 走和 #veil
+       同一条绘制路径才稳定。 */
+    #shot {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%; height: 100%;
+      background-repeat: no-repeat;
+      background-position: 0 0;
+      background-size: 100% 100%;
+      pointer-events: none;
+      /* 窗口先上屏、底图后到：暗场是立刻可见的反馈，画面随后淡入，
+         免得人对着「变暗了但还没画面」的一帧发愣。 */
+      opacity: 0;
+      transition: opacity 110ms ease-out;
+    }
+    #shot[data-ready="1"] { opacity: 1; }
+    #veil {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%; height: 100%;
+      background: rgba(6, 8, 12, .55);
+      pointer-events: none;
+    }
+    #veil[hidden] { display: none; }
+    /* 选区：外圈 1px 金线 + 外面一整块暗幕。暗幕靠超大 spread 的 box-shadow，
+       它只画在边框盒之外，所以选区内部是干净的、标注画得上去。 */
+    #sel {
+      position: fixed;
+      box-shadow: 0 0 0 1px var(--gold), 0 0 0 100000px rgba(6, 8, 12, .55);
+    }
+    #sel[hidden] { display: none; }
+    /* 标注层：和选区一样大，坐标按 canvas 像素算，导出透明 PNG 叠回原图。 */
+    #ink {
+      position: absolute; left: 0; top: 0;
+      display: block;
+    }
+    #size {
+      position: absolute; top: -24px; left: 0;
+      padding: 2px 7px; border-radius: 5px;
+      background: rgba(11, 13, 18, .88); color: var(--gold);
+      font-size: 11px; line-height: 16px; letter-spacing: .3px;
+      white-space: nowrap; pointer-events: none;
+    }
+    #text-input {
+      position: absolute;
+      margin: 0; padding: 1px 4px; border: none; outline: none;
+      background: rgba(11, 13, 18, .35); border-radius: 3px;
+      color: var(--mark); font-family: inherit; font-weight: 600;
+      line-height: 1.2; min-width: 30px;
+      box-shadow: 0 0 0 1px rgba(255, 77, 79, .55);
+    }
+    /* 工具条：一排图标 + 右侧动作。宽度比一屏窄得多，所以永远能放下。 */
+    #bar {
+      position: fixed; display: flex; align-items: center; gap: 2px;
+      padding: 6px; border-radius: 12px;
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, .1);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, .5);
+      pointer-events: auto; white-space: nowrap;
+    }
+    #bar[hidden] { display: none; }
+    #bar button {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 6px; width: 32px; height: 32px; padding: 0;
+      border-radius: 8px; cursor: pointer;
+      border: 1px solid transparent; background: transparent;
+      color: #eef0f5; font-size: 12px; font-family: inherit;
+    }
+    #bar button:hover { background: rgba(255, 255, 255, .1); }
+    #bar button:active { background: rgba(255, 255, 255, .17); }
+    #bar button[disabled] { opacity: .4; cursor: default; background: transparent; }
+    #bar button.active {
+      background: rgba(230, 207, 152, .16);
+      border-color: rgba(230, 207, 152, .5);
+      color: var(--gold);
+    }
+    #bar svg { width: 18px; height: 18px; display: block; }
+    #bar .sep {
+      width: 1px; height: 20px; margin: 0 5px;
+      background: rgba(255, 255, 255, .14);
+    }
+    #bar button.wide { width: auto; padding: 0 10px 0 8px; }
+    #bar button.primary {
+      background: var(--gold); border-color: var(--gold); color: #14140f; font-weight: 600;
+    }
+    #bar button.primary:hover { background: #f0d38f; }
+    #bar button.primary svg { width: 16px; height: 16px; }
+    #hint {
+      position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%);
+      padding: 8px 16px; border-radius: 999px;
+      background: rgba(11, 13, 18, .82); color: #cfd3dc;
+      font-size: 12px; letter-spacing: .2px; white-space: nowrap;
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+    #hint[hidden] { display: none; }
+    #hint b { color: var(--gold); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div id="shot"></div>
+  <div id="veil"></div>
+  <div id="sel" hidden>
+    <canvas id="ink"></canvas>
+    <span id="size"></span>
+  </div>
+  <div id="hint">拖动框选 · 松手后可标注 · <b>Enter</b> 识别 · <b>Esc</b> 取消</div>
+  <div id="bar" hidden>
+    <button id="tool-pointer" class="active" title="移动选区（V）" aria-label="移动选区">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+        <path d="M6 3.2 18 10.6l-5.4 1.5-2.1 5.3z" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+    <button id="tool-rect" title="矩形（R）" aria-label="矩形">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <rect x="4" y="6" width="16" height="12" rx="1.5"/>
+      </svg>
+    </button>
+    <button id="tool-ellipse" title="椭圆（O）" aria-label="椭圆">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <ellipse cx="12" cy="12" rx="8" ry="6"/>
+      </svg>
+    </button>
+    <button id="tool-arrow" title="箭头（A）" aria-label="箭头">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 19 18.5 5.5"/>
+        <path d="M11.5 5.5h7v7"/>
+      </svg>
+    </button>
+    <button id="tool-pen" title="画笔（P）" aria-label="画笔">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+        <path d="M4 20l4.2-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z"/>
+        <path d="M14.6 6.3 17.7 9.4"/>
+      </svg>
+    </button>
+    <button id="tool-mosaic" title="马赛克（M）" aria-label="马赛克">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="4" y="4" width="6.5" height="6.5" rx="1"/>
+        <rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/>
+        <rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/>
+        <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/>
+      </svg>
+    </button>
+    <button id="tool-text" title="文字（T）" aria-label="文字">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <path d="M5 6h14"/><path d="M12 6v13"/>
+      </svg>
+    </button>
+    <button id="undo" title="撤销（⌘Z）" aria-label="撤销">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 9.5h9.5a4.5 4.5 0 0 1 0 9H9"/>
+        <path d="M7.5 6 4 9.5 7.5 13"/>
+      </svg>
+    </button>
+    <span class="sep"></span>
+    <button id="ok" class="primary wide" title="识别这块（Enter）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8"/>
+        <path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8"/>
+        <path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16"/>
+        <path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/>
+      </svg>
+      识别
+    </button>
+    <button id="copy" class="wide" title="复制到剪贴板（⌘C）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+        <rect x="9" y="9" width="11" height="11" rx="2"/>
+        <path d="M15 6.5A2.5 2.5 0 0 0 12.5 4H6.5A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15"/>
+      </svg>
+      复制
+    </button>
+    <button id="full" title="整屏（⇧Enter）" aria-label="整屏">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <path d="M4 9V4h5"/><path d="M20 15v5h-5"/>
+        <path d="M15 4h5v5"/><path d="M9 20H4v-5"/>
+      </svg>
+    </button>
+    <button id="cancel" title="取消（Esc）" aria-label="取消">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M6 6l12 12"/><path d="M18 6 6 18"/>
+      </svg>
+    </button>
+  </div>
+
+  <script src="/overlay.js"></script>
+</body>
+</html>
