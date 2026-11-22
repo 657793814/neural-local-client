@@ -278,6 +278,10 @@ pub fn usage(conn: &Connection, data_dir: &Path, db_path: &Path) -> Result<Usage
         if rel.starts_with("courseware/") {
             continue;
         }
+        // 听写清单原图由听写台自己管，不当孤儿图统计。
+        if rel.starts_with("dictation/") {
+            continue;
+        }
         if refs.contains(&rel) || is_recent(&path, GUARD) {
             continue;
         }
@@ -397,6 +401,10 @@ pub fn clean_orphan_assets(
         }
         // 作答照片同理：学生交上来的卷子照片由批改台管，不当孤儿图删。
         if rel.starts_with("submissions/") {
+            continue;
+        }
+        // 听写清单原图由听写台管，清理临时文件不能删。
+        if rel.starts_with("dictation/") {
             continue;
         }
         if refs.contains(&rel) {

@@ -29,6 +29,8 @@ base64 = "0.22"
 encoding_rs = "0.8"
 tokio = { version = "1", features = ["time", "sync", "macros"] }
 qrcode = { version = "0.14", features = ["svg"] }
+# 听写台的本地拼音：离线字典 + 多音字候选（heteronym 在默认特性里）。
+pinyin = "0.11"
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFBase", "CFCGTypes", "CFURL", "CFString", "CFData", "CFByteOrder", "CFDictionary"] }

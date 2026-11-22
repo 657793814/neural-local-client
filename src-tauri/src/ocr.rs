@@ -84,6 +84,185 @@ pub fn questions_from_lines(lines: &[Line], source: &str) -> Vec<Value> {
         .collect()
 }
 
+/// 听写清单：按词条切，不按题号切。
+/// 返回给校对页的草稿字段与 `local_dictation_item` 一一对应。
+pub fn dictation_items_from_lines(lines: &[Line], source: &str) -> Vec<Value> {
+    let mut items = Vec::new();
+    let mut ord = 0i64;
+    for line in lines {
+        let text = clean_line(&line.text);
+        if text.is_empty() || is_page_noise(&text) {
+            continue;
+        }
+        for numbered in split_numbered_line(&text) {
+            let body = strip_dictation_number(&numbered).unwrap_or_else(|| numbered.clone());
+            for piece in split_dictation_line(&body) {
+                let piece = piece.trim().trim_matches(['"', '"', '"', '\'', '\'']).trim();
+                if piece.is_empty() {
+                    continue;
+                }
+                let lang = dictation_lang(piece);
+                let py = if lang == "ZH" {
+                    crate::pinyin::annotate(piece)
+                } else {
+                    serde_json::json!({"pinyin": "", "candidates": [], "needsReview": false})
+                };
+                let needs_review = line.confidence < 0.35
+                    || py["needsReview"].as_bool().unwrap_or(false)
+                    || piece.contains(' ') && lang == "ZH";
+                ord += 1;
+                items.push(serde_json::json!({
+                    "id": format!("draft-{}", uuid::Uuid::new_v4()),
+                    "ord": ord,
+                    "text": piece,
+                    "lang": lang,
+                    "pinyin": py["pinyin"].as_str().unwrap_or(""),
+                    "pinyinCandidates": py["candidates"],
+                    "selectedPinyin": "",
+                    "speakAs": piece,
+                    "meaning": "",
+                    "bbox": line.bbox,
+                    "confidence": line.confidence,
+                    "needsReview": needs_review,
+                }));
+            }
+        }
+    }
+    let _ = source;
+    items
+}
+
+/// 一行里有多个序号时先按序号切开，避免 `3、银行 4、行走` 被当成一条。
+fn split_numbered_line(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut starts = Vec::new();
+    let mut index = 0usize;
+    while index < chars.len() {
+        let ch = chars[index];
+        if ('\u{2460}'..='\u{2473}').contains(&ch) {
+            starts.push(index);
+            index += 1;
+            continue;
+        }
+        if ch.is_ascii_digit() {
+            let mut end = index;
+            while end < chars.len() && chars[end].is_ascii_digit() {
+                end += 1;
+            }
+            if let Some(separator) = chars.get(end) {
+                let decimal = matches!(separator, '.' | '．')
+                    && chars.get(end + 1).map(|next| next.is_ascii_digit()).unwrap_or(false);
+                if matches!(separator, '.' | '．' | '、' | ')' | '）' | ':') && !decimal {
+                    starts.push(index);
+                    index = end + 1;
+                    continue;
+                }
+            }
+        }
+        if ch.is_ascii_alphabetic()
+            && chars.get(index + 1).map(|next| matches!(next, '.' | '、' | ')')).unwrap_or(false)
+        {
+            starts.push(index);
+            index += 2;
+            continue;
+        }
+        index += 1;
+    }
+    if starts.len() <= 1 {
+        return vec![text.to_string()];
+    }
+    starts
+        .iter()
+        .enumerate()
+        .map(|(at, start)| {
+            let end = starts.get(at + 1).copied().unwrap_or(chars.len());
+            chars[*start..end].iter().collect::<String>().trim().to_string()
+        })
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+/// 认行首序号：`1.` `1、` `1)` `(1)` `①` `A.`。单字词条也要认（比 question_start 宽）。
+fn strip_dictation_number(line: &str) -> Option<String> {
+    let mut text = line.trim_start();
+    if let Some(rest) = text.strip_prefix('(').or_else(|| text.strip_prefix('（')) {
+        if let Some(end) = rest.find([')', '）']) {
+            text = rest[end + 1..].trim_start();
+        }
+    }
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return None;
+    }
+    // 圈号 ①–⑳
+    let first = chars[0];
+    if ('\u{2460}'..='\u{2473}').contains(&first) {
+        let rest: String = chars[1..].iter().collect();
+        return Some(rest.trim_start().to_string()).filter(|s| !s.is_empty());
+    }
+    let mut digits = 0;
+    while digits < chars.len() && chars[digits].is_ascii_digit() {
+        digits += 1;
+    }
+    let mut rest = if digits > 0 {
+        let separator = *chars.get(digits)?;
+        if !matches!(separator, '.' | '．' | '、' | ')' | '）' | ' ' | ':') {
+            return None;
+        }
+        // 1.5 不是序号
+        if matches!(separator, '.' | '．')
+            && chars.get(digits + 1).map(|c| c.is_ascii_digit()).unwrap_or(false)
+        {
+            return None;
+        }
+        chars[digits + 1..].iter().collect::<String>()
+    } else if first.is_ascii_alphabetic() && chars.get(1).map(|c| matches!(c, '.' | '、' | ')')).unwrap_or(false) {
+        chars[2..].iter().collect::<String>()
+    } else {
+        return None;
+    };
+    rest = rest.trim_start().trim_start_matches(['：', ':']).trim_start().to_string();
+    if rest.is_empty() {
+        None
+    } else {
+        Some(rest)
+    }
+}
+
+/// 一行多词才切；单个 `e.g.`、`mother-in-law` 不被误伤。
+fn split_dictation_line(body: &str) -> Vec<String> {
+    let separators: Vec<usize> = body
+        .char_indices()
+        .filter(|(_, ch)| matches!(ch, '、' | ',' | '，' | ';' | '；' | '/' | '|'))
+        .map(|(index, _)| index)
+        .collect();
+    if !separators.is_empty() {
+        let mut out = Vec::new();
+        let mut start = 0usize;
+        for at in separators {
+            out.push(body[start..at].to_string());
+            start = at + body[at..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        }
+        out.push(body[start..].to_string());
+        return out;
+    }
+    if body.contains("  ") || body.contains('\t') {
+        return body.split_whitespace().map(str::to_string).collect();
+    }
+    vec![body.to_string()]
+}
+
+fn dictation_lang(text: &str) -> &'static str {
+    let han = text.chars().any(|ch| ('\u{3400}'..='\u{9fff}').contains(&ch));
+    if han {
+        return "ZH";
+    }
+    if text.chars().any(|ch| ch.is_ascii_alphabetic()) {
+        return "EN";
+    }
+    "OTHER"
+}
+
 // ---------------------------------------------------------------------------
 // 读图：统一转成 RGBA，EXIF 转正；常见格式都走 image crate
 // ---------------------------------------------------------------------------
@@ -993,6 +1172,30 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["answer"], "B");
         assert!(items[0]["analysis"].as_str().unwrap().contains("乙正确"));
+    }
+
+    #[test]
+    fn dictation_lines_split_into_words_with_pinyin() {
+        let lines = vec![
+            line("1. apple，2. banana", 0.9),
+            line("3、银行 4、行走", 0.9),
+        ];
+        let items = dictation_items_from_lines(&lines, "test");
+        assert_eq!(items.len(), 4, "{items:?}");
+        assert_eq!(items[0]["text"], "apple");
+        assert_eq!(items[1]["lang"], "EN");
+        assert_eq!(items[2]["text"], "银行");
+        assert_eq!(items[2]["pinyin"], "yín háng");
+        assert_eq!(items[3]["pinyin"], "xíng zǒu");
+    }
+
+    #[test]
+    fn dictation_keeps_single_character_and_flags_polyphone() {
+        let items = dictation_items_from_lines(&[line("1. 重", 0.9)], "");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["text"], "重");
+        assert_eq!(items[0]["needsReview"], true);
+        assert!(items[0]["pinyinCandidates"].as_array().unwrap().len() > 0);
     }
 
     #[test]

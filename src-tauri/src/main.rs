@@ -11,6 +11,7 @@ mod commands;
 mod compose;
 mod courseware;
 mod db;
+mod dictation;
 mod diagram;
 mod diagram_scene;
 mod export;
@@ -26,6 +27,7 @@ mod overlay;
 mod paper;
 mod perm;
 mod photo_upload_server;
+mod pinyin;
 mod progress;
 mod repo;
 mod review;
@@ -52,9 +54,16 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        let _ = app.emit("nb://capture", ());
+                        let key = shortcut.to_string();
+                        if key.trim_end().ends_with('N') {
+                            let _ = app.emit("nb://dictation-next", ());
+                        } else if key.trim_end().ends_with('R') {
+                            let _ = app.emit("nb://dictation-repeat", ());
+                        } else {
+                            let _ = app.emit("nb://capture", ());
+                        }
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.set_focus();
                         }
@@ -79,6 +88,13 @@ fn main() {
             // 全局热键冲突不该让应用起不来：注册失败只记日志，页面里还有按钮。
             if let Err(error) = app.global_shortcut().register("CmdOrCtrl+Shift+O") {
                 eprintln!("全局热键 ⌘⇧O 注册失败：{error}");
+            }
+            // 听写台：下一个 / 重播这条。注册失败只记日志，页面按钮始终可用。
+            if let Err(error) = app.global_shortcut().register("CmdOrCtrl+Shift+N") {
+                eprintln!("全局热键 ⌘⇧N 注册失败：{error}");
+            }
+            if let Err(error) = app.global_shortcut().register("CmdOrCtrl+Shift+R") {
+                eprintln!("全局热键 ⌘⇧R 注册失败：{error}");
             }
 
             // 临时冒烟：NB_SMOKE_BROWSER 打开第三方页面窗口，验证远程 IPC 白名单。
@@ -185,6 +201,12 @@ fn main() {
             commands::browser_collect,
             commands::browser_set_subject,
             commands::ocr_status,
+            commands::dictation_ocr_from_path,
+            commands::dictation_pinyin,
+            commands::dictation_set_save,
+            commands::dictation_set_list,
+            commands::dictation_set_get,
+            commands::dictation_set_delete,
             commands::smart_regions,
             commands::smart_crop,
             commands::image_stitch,

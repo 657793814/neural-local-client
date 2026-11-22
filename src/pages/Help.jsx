@@ -9,6 +9,7 @@ import insights from '../help/insights.md?raw';
 import scoresDoc from '../help/scores.md?raw';
 import coursewareDoc from '../help/courseware.md?raw';
 import gradingDoc from '../help/grading.md?raw';
+import dictationDoc from '../help/dictation.md?raw';
 import importDoc from '../help/import.md?raw';
 import packFormat from '../help/pack-format.md?raw';
 import models from '../help/models.md?raw';
@@ -37,6 +38,7 @@ export const DOCS = [
     {slug: 'scores', title: '成绩', desc: '考试登分、名次与分数段', group: 'teach', body: scoresDoc},
     {slug: 'courseware', title: '课件', desc: '讲义生成、例题变式与布置', group: 'teach', body: coursewareDoc},
     {slug: 'grading', title: '批改台', desc: '拍照批改、切题与逐题给分', group: 'teach', body: gradingDoc},
+    {slug: 'dictation', title: '听写', desc: '拼音定音、语音播报与人工核对', group: 'teach', body: dictationDoc},
     {slug: 'sync', title: '同步', desc: '连接中心题库与冲突处理', group: 'care', body: syncDoc},
     {slug: 'backup', title: '备份与换机', desc: '整库拷贝与恢复', group: 'care', body: backup},
     {slug: 'faq', title: '常见问题', desc: '报错怎么处理', group: 'care', body: faq},

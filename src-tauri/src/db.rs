@@ -21,6 +21,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0014_courseware_import.sql"),
     include_str!("../migrations/0015_diagram_purpose.sql"),
     include_str!("../migrations/0016_knowledge_expand.sql"),
+    include_str!("../migrations/0017_dictation.sql"),
 ];
 const SEED_CURRICULUM: &str = include_str!("../seed/curriculum.json");
 

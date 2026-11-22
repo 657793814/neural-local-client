@@ -16,6 +16,7 @@ import Insights from './pages/Insights.jsx';
 import Scores from './pages/Scores.jsx';
 import Courseware from './pages/Courseware.jsx';
 import Grading from './pages/Grading.jsx';
+import Dictation from './pages/Dictation.jsx';
 import ImportPack from './pages/ImportPack.jsx';
 import Generate from './pages/Generate.jsx';
 import SyncPage from './pages/Sync.jsx';
@@ -40,6 +41,7 @@ const ICON = {
     scores: 'M6 3h12v18l-6-4-6 4V3Zm3 5h6M9 11h6M9 14h3',
     courseware: 'M5 4.5A1.5 1.5 0 0 1 6.5 3H18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6.5A1.5 1.5 0 0 0 5 20.5v-16Zm0 16A1.5 1.5 0 0 1 6.5 22H19M9 8h6M9 12h4',
     grading: 'M4 6h16v11H4zM8 17v3m8-3v3M8 10h8M8 13h5',
+    dictation: 'M4 9v6a2 2 0 0 0 2 2h2l1.5 2h5L16 17h2a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2Zm4 1h8m-8 3h5',
     sync: 'M20 11a8 8 0 1 0-2.3 6.1M20 5v6h-6',
     profile: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0',
     settings: 'M12 15.3a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6Zm8-3.3c0-.5-.05-1-.13-1.5l2-1.5-2-3.4-2.3.9a8 8 0 0 0-2.6-1.5L14.5 2h-4l-.4 2.9a8 8 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a8.6 8.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a8 8 0 0 0 2.6 1.5l.4 2.9h4l.4-2.9a8 8 0 0 0 2.6-1.5l2.3.9 2-3.4-2-1.5c.08-.5.13-1 .13-1.5Z',
@@ -68,6 +70,7 @@ const NAV = [
     {key: 'papers', label: '试卷', hint: '组卷 · 排版 · 答题卡'},
     {key: 'classes', label: '班级', hint: '学生 · 作业 · 批改'},
     {key: 'grading', label: '批改台', hint: '拍照 · 逐题给分'},
+    {key: 'dictation', label: '听写', hint: '拼音 · 播报 · 核对'},
     {key: 'insights', label: '学情', hint: '掌握度 · 错题'},
     {key: 'scores', label: '成绩', hint: '考试 · 登分'},
     {key: 'courseware', label: '课件', hint: '讲义 · 例题 · 变式'},
@@ -127,6 +130,9 @@ export default function App() {
     const [accountOpen, setAccountOpen] = useState(false);
     const [syncPending, setSyncPending] = useState(0);
     const [navOrder, setNavOrderState] = useState(loadNavOrder);
+    // 全局热键：即使听写台没打开，也把它带过去并送一个推进信号。
+    const [dictationNextTick, setDictationNextTick] = useState(0);
+    const [dictationRepeatTick, setDictationRepeatTick] = useState(0);
 
     /** 设置里拖完菜单：状态与 localStorage 一起落盘；未知 key 补在已知名后面。 */
     const setNavOrder = (order) => {
@@ -224,6 +230,24 @@ export default function App() {
             cancelThree?.();
             cancelFour?.();
         };
+    }, []);
+
+    useEffect(() => {
+        let offNext;
+        let offRepeat;
+        Promise.all([
+            listen('nb://dictation-next', () => {
+                window.location.hash = '#/dictation';
+                setDictationNextTick((value) => value + 1);
+            }),
+            listen('nb://dictation-repeat', () => {
+                window.location.hash = '#/dictation';
+                setDictationRepeatTick((value) => value + 1);
+            }),
+        ])
+            .then(([a, b]) => { offNext = a; offRepeat = b; })
+            .catch(() => {});
+        return () => { offNext?.(); offRepeat?.(); };
     }, []);
 
     const go = (key) => {
@@ -440,6 +464,9 @@ export default function App() {
                 )}
                 {active === 'grading' && (
                     <Grading onGo={go}/>
+                )}
+                {active === 'dictation' && (
+                    <Dictation nextTick={dictationNextTick} repeatTick={dictationRepeatTick}/>
                 )}
                 {active === 'assignments' && (
                     <Assignments classId={route.param} onGo={go} onChanged={refresh}/>

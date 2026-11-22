@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {open} from '@tauri-apps/plugin-dialog';
 import {
     backupExport,
@@ -101,18 +101,51 @@ export default function Settings({boot, navMeta = [], navOrder, onNavOrder, onCh
         changeRoute(purpose, ids);
     };
 
-    // 菜单排序：拖到哪一行就落在哪一行；后续插件注册的菜单项也会出现在这个列表里。
-    const dragNav = (event, index) => {
-        event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/plain', String(index));
+    // 菜单排序：用指针事件拖拽（HTML5 原生 DnD 在 Tauri 的 WKWebView 里不可靠）。
+    // 拖到哪一行就落在哪一行；同时保留上下按钮，键盘/触屏也能调整。
+    const dragState = useRef(null);
+    const [dragFrom, setDragFrom] = useState(null);
+    const [dragOver, setDragOver] = useState(null);
+
+    const pointerDown = (event, index) => {
+        if (event.button !== 0) return;
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        dragState.current = {id: event.pointerId, from: index, over: index};
+        setDragFrom(index);
+        setDragOver(index);
     };
-    const dropNav = (event, index) => {
-        event.preventDefault();
-        const from = Number(event.dataTransfer.getData('text/plain'));
-        if (Number.isNaN(from) || from === index || !onNavOrder) return;
+    const pointerMove = (event) => {
+        const drag = dragState.current;
+        if (!drag || drag.id !== event.pointerId) return;
+        // 指针可能落在子元素上，向上找到真正的行（用 data-nav-index 标记）。
+        const row = document.elementFromPoint(event.clientX, event.clientY)
+            ?.closest?.('[data-nav-index]');
+        if (!row) return;
+        const to = Number(row.getAttribute('data-nav-index'));
+        if (Number.isNaN(to)) return;
+        drag.over = to;
+        setDragOver(to);
+    };
+    const pointerEnd = (event) => {
+        const drag = dragState.current;
+        if (!drag || drag.id !== event.pointerId) return;
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        const {from, over} = drag;
+        dragState.current = null;
+        setDragFrom(null);
+        setDragOver(null);
+        if (from === over || !onNavOrder) return;
         const next = [...navOrder];
         const [moved] = next.splice(from, 1);
-        next.splice(index, 0, moved);
+        next.splice(over, 0, moved);
+        onNavOrder(next);
+    };
+    const moveBy = (index, delta) => {
+        const to = index + delta;
+        if (to < 0 || to >= navOrder.length || !onNavOrder) return;
+        const next = [...navOrder];
+        const [moved] = next.splice(index, 1);
+        next.splice(to, 0, moved);
         onNavOrder(next);
     };
 
@@ -312,11 +345,14 @@ export default function Settings({boot, navMeta = [], navOrder, onNavOrder, onCh
                             return (
                                 <li
                                     key={key}
-                                    className="nav-order-item"
-                                    draggable
-                                    onDragStart={(event) => dragNav(event, index)}
-                                    onDragOver={(event) => event.preventDefault()}
-                                    onDrop={(event) => dropNav(event, index)}
+                                    data-nav-index={index}
+                                    className={cx('nav-order-item',
+                                        dragFrom === index && 'dragging',
+                                        dragFrom !== null && dragOver === index && dragFrom !== index && 'drag-over')}
+                                    onPointerDown={(event) => pointerDown(event, index)}
+                                    onPointerMove={pointerMove}
+                                    onPointerUp={pointerEnd}
+                                    onPointerCancel={pointerEnd}
                                     title="按住拖动调整顺序"
                                 >
                                     <span className="nav-order-grip" aria-hidden="true">
@@ -324,6 +360,26 @@ export default function Settings({boot, navMeta = [], navOrder, onNavOrder, onCh
                                     </span>
                                     <span className="nav-order-label">{item?.label || key}</span>
                                     {item?.hint && <span className="nav-order-hint">{item.hint}</span>}
+                                    <span className="nav-order-arrows">
+                                        <button
+                                            type="button"
+                                            className="nav-order-arrow"
+                                            disabled={index === 0}
+                                            onPointerDown={(event) => event.stopPropagation()}
+                                            onClick={() => moveBy(index, -1)}
+                                            title="上移"
+                                            aria-label="上移"
+                                        >↑</button>
+                                        <button
+                                            type="button"
+                                            className="nav-order-arrow"
+                                            disabled={index === navOrder.length - 1}
+                                            onPointerDown={(event) => event.stopPropagation()}
+                                            onClick={() => moveBy(index, 1)}
+                                            title="下移"
+                                            aria-label="下移"
+                                        >↓</button>
+                                    </span>
                                     <span className="nav-order-pos">{index + 1}</span>
                                 </li>
                             );

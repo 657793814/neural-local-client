@@ -10,3 +10,4 @@ ui-preview-*.png
 .idea/
 .memsearch/
 .workbuddy/
+/docs/

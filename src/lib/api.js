@@ -79,6 +79,14 @@ export const browserSetSubject = (subjectId) => call('browser_set_subject', {sub
 export const browserExtractQuestions = () => call('browser_extract_questions');
 // 本机 OCR（macOS Vision）是否可用：离线、不花模型额度。
 export const ocrStatus = () => call('ocr_status');
+
+// 听写台：OCR 切词、拼音建议、批次存取。播报走浏览器系统语音，不经过 IPC。
+export const dictationOcrFromPath = (path) => call('dictation_ocr_from_path', {path});
+export const dictationPinyin = (text) => call('dictation_pinyin', {text});
+export const dictationSetSave = (draft) => call('dictation_set_save', {input: draft});
+export const dictationSetList = () => call('dictation_set_list');
+export const dictationSetGet = (id) => call('dictation_set_get', {id});
+export const dictationSetDelete = (id) => call('dictation_set_delete', {id});
 export const smartRegions = (path) => call('smart_regions', {path});
 export const smartCrop = (path, region) => call('smart_crop', {path, region});
 // 跨页题：相邻几页竖着拼成一张，交给识别链路

@@ -2662,6 +2662,49 @@ pub fn photo_upload_status() -> Result<crate::photo_upload_server::UploadStatusI
     Ok(crate::photo_upload_server::status())
 }
 
+// ---------------------------------------------------------------------------
+// 听写台（P0）：OCR 切词 + 拼音校对 + 批次存取。播报走 WebView 的系统语音，不经过 IPC。
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn dictation_ocr_from_path(path: String) -> Result<Value, String> {
+    let lines = ocr::recognize(&path)?;
+    let items = ocr::dictation_items_from_lines(&lines, &path);
+    if items.is_empty() {
+        return Err("这张图里没读到听写内容：确认图片方向、清晰度，或手工添加词条".into());
+    }
+    Ok(json!({"items": items}))
+}
+
+#[tauri::command]
+pub fn dictation_pinyin(text: String) -> Result<Value, String> {
+    Ok(crate::pinyin::annotate(&text))
+}
+
+#[tauri::command]
+pub fn dictation_set_save(state: State<'_, AppState>, input: Value) -> Result<String, String> {
+    let mut conn = lock(&state)?;
+    crate::dictation::save_set(&mut conn, &state.data_dir, &input)
+}
+
+#[tauri::command]
+pub fn dictation_set_list(state: State<'_, AppState>) -> Result<Vec<Value>, String> {
+    let conn = lock(&state)?;
+    crate::dictation::list_sets(&conn)
+}
+
+#[tauri::command]
+pub fn dictation_set_get(state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    let conn = lock(&state)?;
+    crate::dictation::get_set(&conn, &id)
+}
+
+#[tauri::command]
+pub fn dictation_set_delete(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let conn = lock(&state)?;
+    crate::dictation::delete_set(&conn, &id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::DiagramResult;
