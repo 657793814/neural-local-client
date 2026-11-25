@@ -106,11 +106,16 @@ pub fn render(scene: &Value) -> Result<String, String> {
     // 记下问题、跳过它继续画；只有剩下能画的东西太少时才判失败，让模型重画。
     let mut problems: Vec<String> = Vec::new();
     let faces = parse_faces(scene, &index, &mut problems);
-    let segments = parse_segments(scene, &index, &mut problems);
+    let mut segments = parse_segments(scene, &index, &mut problems);
     let curves = parse_curves(scene)?;
     let circles = parse_circles(scene)?;
     let marks = parse_marks(scene, &index, &mut problems);
     let fixed_labels = parse_labels(scene);
+    // 直四棱柱 A-B-C-D-A1B1C1D1 是立体几何里最常见的图，也是模型最容易画歪的图：
+    // C1 忘了上移、漏一条侧棱、把右侧棱画成虚线。这里按「顶面 = 底面向上平移」
+    // 统一校正一遍，再补齐 12 条棱，免得一张图因为一个坐标错就全废。
+    let mut nodes = nodes;
+    normalize_prism(&mut nodes, &mut segments);
     let title = scene
         .get("title")
         .and_then(|node| node.as_str())
@@ -254,7 +259,8 @@ pub fn render(scene: &Value) -> Result<String, String> {
     }
 
     // 标注统一由布局算法摆放：先按「背离图形中心」定方向，再逐个试候选位置避让。
-    let labels = layout_labels(&nodes, &segments, &curves, &fit);
+    let mut placed_labels: Vec<Rect> = Vec::new();
+    let labels = layout_labels(&nodes, &segments, &curves, &fit, &mut placed_labels);
     for label in &labels {
         svg.push_str(&format!(
             "<text x=\"{:.1}\" y=\"{:.1}\" font-family=\"{FONT}\" font-size=\"{LABEL_SIZE:.0}\" \
@@ -266,13 +272,20 @@ pub fn render(scene: &Value) -> Result<String, String> {
     }
     // 模型常常一边给 points 自动上标、一边又把同一个点名写进 labels，
     // 直接画就变成 `P P`、`D D` 这种重影。凡是和已摆好的点名同字的自由标注一律丢掉。
-    let placed: Vec<&str> = labels.iter().map(|label| label.2.as_str()).collect();
+    // 比较前先归一化（A1 / A₁ / a_1 视为同一个），否则下标写法不同就漏过去。
+    let mut placed: Vec<String> = labels.iter().map(|label| label_key(&label.2)).collect();
     for (x, y, text) in &fixed_labels {
         let text = text.trim();
-        if text.is_empty() || placed.iter().any(|name| name.trim() == text) {
+        let key = label_key(text);
+        if text.is_empty() || placed.iter().any(|name| name == &key) {
             continue;
         }
-        let (px, py) = fit.px(*x, *y);
+        placed.push(key);
+        // 数值标注的位置是模型给的，经常会压在点名上（例如 ∠BAD=60° 正好盖住 D）。
+        // 在附近试几个位置，找不到不重叠的就干脆不画——少一条文字比糊成一团好。
+        let Some((px, py)) = place_fixed_label(*x, *y, text, &fit, &mut placed_labels) else {
+            continue;
+        };
         svg.push_str(&format!(
             "<text x=\"{px:.1}\" y=\"{py:.1}\" font-family=\"{FONT}\" font-size=\"13\" \
              fill=\"#5b6773\" text-anchor=\"middle\">{}</text>",
@@ -284,11 +297,27 @@ pub fn render(scene: &Value) -> Result<String, String> {
     Ok(svg)
 }
 
+/// 解析 points。支持两种写法：
+/// - 直接给坐标：`{"id":"A","x":20,"y":80}`；
+/// - 中点：`{"id":"E","midpoint":["B","C"]}`（坐标由本地算，模型不用自己求平均）。
+///
+/// 中点值得单独支持：模型算 A₁D 中点时经常写成 A₁D₁ 的中点，图上看不出来但整道题
+/// 就错了。让它只声明关系、由这里求值，比在提示词里反复叮嘱「要真算」可靠。
 fn parse_points(scene: &Value) -> Result<Vec<Node>, String> {
     let Some(list) = scene.get("points").and_then(|node| node.as_array()) else {
         return Ok(Vec::new());
     };
-    let mut nodes = Vec::new();
+
+    struct Raw {
+        id: String,
+        x: Option<f64>,
+        y: Option<f64>,
+        midpoint: Option<(String, String)>,
+        label: Option<String>,
+        dot: bool,
+    }
+
+    let mut raws: Vec<Raw> = Vec::new();
     for (position, item) in list.iter().enumerate() {
         let id = item
             .get("id")
@@ -305,10 +334,27 @@ fn parse_points(scene: &Value) -> Result<Vec<Node>, String> {
         let Some(id) = id else {
             return Err(format!("第 {} 个点没有 id 或 label", position + 1));
         };
-        let x = number(item.get("x")).ok_or_else(|| format!("点 {id} 缺少 x 坐标"))?;
-        let y = number(item.get("y")).ok_or_else(|| format!("点 {id} 缺少 y 坐标"))?;
-        if !x.is_finite() || !y.is_finite() {
-            return Err(format!("点 {id} 的坐标不是有效数字"));
+        let midpoint = item
+            .get("midpoint")
+            .and_then(|node| node.as_array())
+            .and_then(|pair| {
+                let a = pair.first()?.as_str()?.trim().to_string();
+                let b = pair.get(1)?.as_str()?.trim().to_string();
+                if a.is_empty() || b.is_empty() {
+                    None
+                } else {
+                    Some((a, b))
+                }
+            });
+        let x = number(item.get("x"));
+        let y = number(item.get("y"));
+        if midpoint.is_none() {
+            let (Some(x), Some(y)) = (x, y) else {
+                return Err(format!("点 {id} 缺少 x/y 坐标，或写成 midpoint 形式"));
+            };
+            if !x.is_finite() || !y.is_finite() {
+                return Err(format!("点 {id} 的坐标不是有效数字"));
+            }
         }
         // 标注规则：显式 label 优先；`"label": ""` 或 hideLabel 表示不标；
         // 其余只给「短名字」（A、B、P、O、A1 这种）上标——模型常造 Og/On/Of
@@ -325,30 +371,136 @@ fn parse_points(scene: &Value) -> Result<Vec<Node>, String> {
             Some(text) if !text.is_empty() => Some(text),
             Some(_) => None,
             None if hidden => None,
-            None if is_point_name(&id) => Some(id.clone()),
-            None => None,
+            None => point_label(&id),
         };
         let dot = item.get("dot").and_then(|node| node.as_bool()).unwrap_or(false);
-        nodes.push(Node {
+        raws.push(Raw {
             id,
-            x: clamp(x, -40.0, 140.0),
-            y: clamp(y, -40.0, 140.0),
+            x,
+            y,
+            midpoint,
             label,
             dot,
         });
     }
+
+    let mut resolved: Vec<Option<Node>> = raws.iter().map(|_| None).collect();
+    loop {
+        let mut progress = false;
+        let known: HashMap<String, (f64, f64)> = raws
+            .iter()
+            .zip(resolved.iter())
+            .filter_map(|(raw, node)| node.as_ref().map(|node| (raw.id.clone(), (node.x, node.y))))
+            .collect();
+        for (position, raw) in raws.iter().enumerate() {
+            if resolved[position].is_some() {
+                continue;
+            }
+            let (x, y) = match &raw.midpoint {
+                Some((a, b)) => match (known.get(a), known.get(b)) {
+                    (Some(pa), Some(pb)) => ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0),
+                    _ => continue,
+                },
+                None => match (raw.x, raw.y) {
+                    (Some(x), Some(y)) => (x, y),
+                    _ => continue,
+                },
+            };
+            resolved[position] = Some(Node {
+                id: raw.id.clone(),
+                x: clamp(x, 5.0, 95.0),
+                y: clamp(y, 5.0, 95.0),
+                label: raw.label.clone(),
+                dot: raw.dot,
+            });
+            progress = true;
+        }
+        if !progress {
+            break;
+        }
+    }
+
+    let mut nodes = Vec::new();
+    for (raw, node) in raws.into_iter().zip(resolved) {
+        match node {
+            Some(node) => nodes.push(node),
+            None => {
+                return Err(match &raw.midpoint {
+                    Some((a, b)) => format!("点 {} 的中点引用了不存在的点（{a}、{b}）", raw.id),
+                    None => format!("点 {} 缺少坐标", raw.id),
+                })
+            }
+        }
+    }
     Ok(nodes)
 }
 
-/// 点名长这样：单个字符（A、B、P、O、α），或「字母 + 数字」（A1、P2）。
-/// 两个字母以上的多半是模型自造的辅助点（Og、On、Of），不自动上标。
-fn is_point_name(id: &str) -> bool {
+/// 自动标注用的显示名：A1 → A₁，P_2 → P₂。不是「点名」时返回 None。
+/// 两个字母以上且没有数字的多半是模型自造的辅助点（Og、On、Of），不自动上标。
+fn point_label(id: &str) -> Option<String> {
+    let id = id.trim();
     let chars: Vec<char> = id.chars().collect();
-    match chars.len() {
-        0 => false,
-        1 => true,
-        _ => chars[0].is_alphabetic() && chars[1..].iter().all(|ch| ch.is_ascii_digit()),
+    if chars.len() == 1 {
+        return chars[0].is_alphabetic().then(|| id.to_string());
     }
+    let split = chars
+        .iter()
+        .position(|ch| ch.is_ascii_digit() || *ch == '_')
+        .unwrap_or(chars.len());
+    if split == 0 || split == chars.len() {
+        return None;
+    }
+    let head: String = chars[..split].iter().collect();
+    if !head.chars().all(|ch| ch.is_alphabetic()) {
+        return None;
+    }
+    let tail: String = chars[split..].iter().collect();
+    let tail = tail.trim_start_matches('_');
+    if tail.is_empty() || !tail.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    let mut out = head;
+    for ch in tail.chars() {
+        out.push(match ch {
+            '0' => '₀',
+            '1' => '₁',
+            '2' => '₂',
+            '3' => '₃',
+            '4' => '₄',
+            '5' => '₅',
+            '6' => '₆',
+            '7' => '₇',
+            '8' => '₈',
+            '9' => '₉',
+            _ => ch,
+        });
+    }
+    Some(out)
+}
+
+/// 比较点名用的归一化：A1、A₁、a_1 视为同一个，避免「A₁ A1」重影。
+fn label_key(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.trim().chars() {
+        if ch.is_whitespace() || ch == '_' || ch == '{' || ch == '}' {
+            continue;
+        }
+        let mapped = match ch {
+            '₀' => '0',
+            '₁' => '1',
+            '₂' => '2',
+            '₃' => '3',
+            '₄' => '4',
+            '₅' => '5',
+            '₆' => '6',
+            '₇' => '7',
+            '₈' => '8',
+            '₉' => '9',
+            other => other,
+        };
+        out.push(mapped);
+    }
+    out
 }
 
 fn build_index(nodes: &[Node]) -> HashMap<String, usize> {
@@ -405,11 +557,107 @@ fn parse_faces(scene: &Value, index: &HashMap<String, usize>, problems: &mut Vec
     faces
 }
 
+/// 直四棱柱的确定性校正：顶面必须由底面向上平移，12 条棱一条不少。
+///
+/// 只认最常见的命名（底面 A、B、C、D，顶面 A1、B1、C1、D1）；对不上就原样返回，
+/// 不碰其它图形。虚线按「从右前上方看」的可见性重算：后底边、后左底边、后左侧棱
+/// 被挡住，其余实线——比模型自己标注可靠。
+fn normalize_prism(nodes: &mut [Node], segments: &mut Vec<Segment>) {
+    let index = build_index(nodes);
+    let base_ids = ["A", "B", "C", "D"];
+    let mut base: Vec<usize> = Vec::new();
+    let mut top: Vec<usize> = Vec::new();
+    for id in base_ids {
+        let Some(&b) = index.get(id) else {
+            return;
+        };
+        let Some(&t) = index.get(&format!("{id}1")) else {
+            return;
+        };
+        base.push(b);
+        top.push(t);
+    }
+
+    // 侧棱高度取各对的中位数：个别点（常见是 C1）漏了平移，不该把整张图带偏。
+    let mut heights: Vec<f64> = base
+        .iter()
+        .zip(top.iter())
+        .map(|(&b, &t)| nodes[b].y - nodes[t].y)
+        .filter(|height| *height > 2.0)
+        .collect();
+    if heights.len() < 3 {
+        return;
+    }
+    heights.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let height = heights[heights.len() / 2];
+    for (&b, &t) in base.iter().zip(top.iter()) {
+        nodes[t].x = nodes[b].x;
+        nodes[t].y = nodes[b].y - height;
+    }
+
+    // 观察方向固定为右前上方：y 越小越靠后。后排两个点里 x 小的那个是「后左」，
+    // 它的竖棱和两条后底边被挡住。
+    let mut order: Vec<usize> = base.clone();
+    order.sort_by(|&a, &b| {
+        nodes[a]
+            .y
+            .partial_cmp(&nodes[b].y)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(nodes[a].x.partial_cmp(&nodes[b].x).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    let back = &order[..2];
+    let front = &order[2..];
+    let back_left = if nodes[back[0]].x <= nodes[back[1]].x { back[0] } else { back[1] };
+    let front_left = if nodes[front[0]].x <= nodes[front[1]].x { front[0] } else { front[1] };
+    let top_of = |point: usize| {
+        base.iter()
+            .position(|&item| item == point)
+            .map(|position| top[position])
+    };
+
+    let pairs = |a: usize, b: usize| -> (usize, usize) {
+        if a <= b {
+            (a, b)
+        } else {
+            (b, a)
+        }
+    };
+    let mut hidden: Vec<(usize, usize)> = vec![pairs(back[0], back[1]), pairs(back_left, front_left)];
+    if let Some(t) = top_of(back_left) {
+        hidden.push(pairs(back_left, t));
+    }
+
+    let mut ensure = |a: usize, b: usize| {
+        let dashed = hidden.contains(&pairs(a, b));
+        if let Some(existing) = segments
+            .iter_mut()
+            .find(|segment| pairs(segment.a, segment.b) == pairs(a, b))
+        {
+            existing.dashed = dashed;
+            return;
+        }
+        segments.push(Segment {
+            a,
+            b,
+            dashed,
+            color: if dashed { HIDDEN } else { LINE }.to_string(),
+            arrow: false,
+        });
+    };
+
+    // 底面四条、顶面四条、侧棱四条。
+    for (a, b) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
+        ensure(base[a], base[b]);
+        ensure(top[a], top[b]);
+        ensure(base[a], top[a]);
+    }
+}
+
 fn parse_segments(scene: &Value, index: &HashMap<String, usize>, problems: &mut Vec<String>) -> Vec<Segment> {
     let Some(list) = scene.get("segments").and_then(|node| node.as_array()) else {
         return Vec::new();
     };
-    let mut segments = Vec::new();
+    let mut segments: Vec<Segment> = Vec::new();
     for item in list {
         let a = match lookup(index, item.get("a").or_else(|| item.get("from")), "线段") {
             Ok(point) => point,
@@ -435,6 +683,15 @@ fn parse_segments(scene: &Value, index: &HashMap<String, usize>, problems: &mut 
             .unwrap_or(false);
         let color = color_of(item, if dashed { HIDDEN } else { LINE });
         let arrow = item.get("arrow").and_then(|node| node.as_bool()).unwrap_or(false);
+        // 同一段线模型常写两遍（A→M 与 M→A），画两次线会变粗。合并成一条；
+        // 只要有一次标了 dashed，就按虚线算，宁可画虚线也别把被挡住的棱画实。
+        if let Some(existing) = segments.iter_mut().find(|segment| {
+            (segment.a == a && segment.b == b) || (segment.a == b && segment.b == a)
+        }) {
+            existing.dashed = existing.dashed || dashed;
+            existing.arrow = existing.arrow || arrow;
+            continue;
+        }
         segments.push(Segment {
             a,
             b,
@@ -624,8 +881,8 @@ fn layout_labels(
     segments: &[Segment],
     curves: &[Curve],
     fit: &Fit,
+    placed: &mut Vec<Rect>,
 ) -> Vec<(f64, f64, String)> {
-    let mut placed: Vec<Rect> = Vec::new();
     let mut out = Vec::new();
 
     if nodes.is_empty() {
@@ -752,6 +1009,50 @@ struct Rect {
     y: f64,
     w: f64,
     h: f64,
+}
+
+/// 给模型指定的数值标注找一个不压点名/不压别的字的位置。
+/// 先试原位置，再沿上下左右挪；都放不下就不画（返回 None）。
+fn place_fixed_label(
+    x: f64,
+    y: f64,
+    text: &str,
+    fit: &Fit,
+    placed: &mut Vec<Rect>,
+) -> Option<(f64, f64)> {
+    let width = text_width(text, 13.0);
+    let height = 13.0 * 1.15;
+    let (px, py) = fit.px(x, y);
+    let offsets = [
+        (0.0, 0.0),
+        (0.0, -14.0),
+        (0.0, 14.0),
+        (-width / 2.0 - 10.0, 0.0),
+        (width / 2.0 + 10.0, 0.0),
+        (0.0, -26.0),
+        (0.0, 26.0),
+        (-width / 2.0 - 10.0, -14.0),
+        (width / 2.0 + 10.0, -14.0),
+    ];
+    for (dx, dy) in offsets {
+        let cx = px + dx;
+        let cy = py + dy;
+        let rect = Rect {
+            x: cx - width / 2.0,
+            y: cy - height / 2.0,
+            w: width,
+            h: height,
+        };
+        if rect.x < 4.0 || rect.y < 4.0 || rect.x + rect.w > WIDTH - 4.0 || rect.y + rect.h > fit.height - 4.0 {
+            continue;
+        }
+        if placed.iter().any(|other| rect.hits(other)) {
+            continue;
+        }
+        placed.push(rect);
+        return Some((cx, cy));
+    }
+    None
 }
 
 impl Rect {
@@ -1055,5 +1356,90 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(svg.matches("<line").count(), 1);
+    }
+
+    /// 中点由本地求值：模型只声明关系，坐标不该再手算（手算最容易错一半）。
+    #[test]
+    fn resolves_midpoint_before_rendering() {
+        let svg = render(&json!({
+            "points": [
+                {"id": "A1", "x": 20, "y": 20},
+                {"id": "D", "x": 60, "y": 80},
+                {"id": "N", "midpoint": ["A1", "D"]}
+            ],
+            "segments": [{"a": "A1", "b": "N"}, {"a": "N", "b": "D"}]
+        }))
+        .unwrap();
+        assert_eq!(svg.matches("<line").count(), 2);
+        // N 应该画在 A1D 的中点 (40,50)，换算成像素后落在两段之间。
+        assert!(svg.contains(">N</text>"));
+        assert!(svg.contains(">A₁</text>"), "A1 要显示成下标：{svg}");
+    }
+
+    /// 模型把 A1 和 A₁ 各写一遍时，图上只能有一个标注。
+    #[test]
+    fn duplicate_labels_ignore_subscript_spelling() {
+        let svg = render(&json!({
+            "points": [
+                {"id": "A1", "x": 20, "y": 20},
+                {"id": "B1", "x": 60, "y": 20}
+            ],
+            "segments": [{"a": "A1", "b": "B1"}],
+            "labels": [
+                {"x": 20, "y": 28, "text": "A₁"},
+                {"x": 60, "y": 28, "text": "B1"}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(svg.matches(">A₁</text>").count(), 1, "实际：{svg}");
+        assert_eq!(svg.matches(">B₁</text>").count(), 1, "实际：{svg}");
+    }
+
+    /// midpoint 引用了不存在的点要明确报错，而不是画到 (0,0)。
+    #[test]
+    fn rejects_midpoint_with_unknown_point() {
+        let error = render(&json!({
+            "points": [{"id": "A", "x": 10, "y": 10}, {"id": "E", "midpoint": ["A", "Z"]}],
+            "segments": [{"a": "A", "b": "E"}]
+        }))
+        .unwrap_err();
+        assert!(error.contains("midpoint") || error.contains("不存在"), "实际：{error}");
+    }
+
+    /// 模型把 C1 漏了平移、又漏掉 C-C1 时，直四棱柱校正要把 12 条棱补齐，
+    /// 并且虚线只留在后底边 AD、后底边 DC、后左侧棱 DD1 上。
+    #[test]
+    fn normalizes_broken_right_prism() {
+        let svg = render(&json!({
+            "points": [
+                {"id": "A", "x": 15, "y": 70},
+                {"id": "B", "x": 45, "y": 70},
+                {"id": "C", "x": 60, "y": 45},
+                {"id": "D", "x": 30, "y": 45},
+                {"id": "A1", "x": 15, "y": 18},
+                {"id": "B1", "x": 45, "y": 18},
+                {"id": "C1", "x": 60, "y": 45},
+                {"id": "D1", "x": 30, "y": 18}
+            ],
+            "segments": [
+                {"a": "A", "b": "B"}, {"a": "B", "b": "C"}, {"a": "A", "b": "A1"},
+                {"a": "B", "b": "B1"}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(svg.matches("<line").count(), 12, "实际：{svg}");
+        assert_eq!(svg.matches("stroke-dasharray").count(), 3, "实际：{svg}");
+        // C1 被校正到和 D1 同一排（顶面后排），并且比 A1 高（y 更小）。
+        let label_y = |label: &str| -> f64 {
+            svg.split(label)
+                .next()
+                .and_then(|head| head.rsplit(" y=\"").next())
+                .and_then(|rest| rest.split('"').next())
+                .and_then(|value| value.parse::<f64>().ok())
+                .unwrap_or_else(|| panic!("找不到 {label} 的 y：{svg}"))
+        };
+        let (c1_y, d1_y, a1_y) = (label_y(">C₁</text>"), label_y(">D₁</text>"), label_y(">A₁</text>"));
+        assert!((c1_y - d1_y).abs() < 2.0, "C1 在 {c1_y}，D1 在 {d1_y}");
+        assert!(c1_y < a1_y, "C1 在 {c1_y}，A1 在 {a1_y}");
     }
 }

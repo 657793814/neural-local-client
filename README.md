@@ -17,6 +17,26 @@
 
 完整功能清单与实现细节见 [docs/product.md](docs/product.md)。
 
+## 界面预览
+
+浅色 / 深色两套主题，动效走克制路线：数字递增、文字解码、打字机、液态玻璃、卡片 3D 倾斜、多色渐变流光、扫描高光、错峰入场。
+
+**关于我** —— 开发者卡的多色渐变流光，联系方式的扫描高光边框，简介逐字打出：
+
+| 浅色 | 深色 |
+| :---: | :---: |
+| ![关于我 · 浅色](screenshots/about-light.png) | ![关于我 · 深色](screenshots/about-dark.png) |
+
+**题库统计** —— KPI 数字滚动与覆盖率环、条形错峰增长与扫光；知识点过多时默认只列前 10 条，可展开：
+
+| 学科视角 | 单学科知识点视角 |
+| :---: | :---: |
+| ![统计 · 学科分布](screenshots/stats-light.png) | ![统计 · 知识点分布](screenshots/stats-dark.png) |
+
+**题库** —— 搜索、筛选、标签、复核状态都在一屏内：
+
+![题库](screenshots/library-light.png)
+
 ## 安装
 
 1. 到 Releases 下载最新的 `NeuralKB Local_0.1.0_aarch64.dmg`（或从源码自行打包，见下）；

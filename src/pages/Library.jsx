@@ -18,6 +18,7 @@ import {QuestionEditor} from '../components/QuestionEditor.jsx';
 import {Pager} from '../components/Pager.jsx';
 import {AddToPaper} from '../components/paper/AddToPaper.jsx';
 import {Drawer, Dropdown, Empty, Field, Loading, Modal, PageHead, Pill, confirmDialog, notify} from '../components/ui.jsx';
+import {CountUp, useSlidingThumb} from '../components/effects.jsx';
 
 const DEFAULT_PAGE_SIZE = 20;
 const TAG_COLLAPSED = 14;
@@ -98,6 +99,15 @@ export default function Library({tree, initialSubject = '', scopes, onChanged, o
     const [addingPaper, setAddingPaper] = useState(null); // 选中的题要加进哪份试卷
     // 标签云与来源只在题量/内容真变了时刷新；翻页不该再把它们整个拉一遍。
     const [catalogKey, setCatalogKey] = useState(0);
+    // 切换题库 / 草稿箱 / 驳回 / 回收站时，玻璃滑块沿着标签条滑过去。
+    const scopeKey = filters.needsReview
+        ? 'draft'
+        : filters.rejected
+            ? 'rejected'
+            : filters.trashed
+                ? 'trash'
+                : 'library';
+    const [scopeRef, scopeThumb] = useSlidingThumb(scopeKey);
 
     useEffect(() => {
         const timer = setTimeout(() => setFilters((current) => ({...current, keyword, page: 1})), 260);
@@ -400,7 +410,18 @@ export default function Library({tree, initialSubject = '', scopes, onChanged, o
 
             {/* 四个列表互斥：题库（已入库）/ 草稿箱 / 驳回列表 / 回收站。
                 三个箱子的数量来自 boot.stats（入库、改状态后 onChanged 会刷新），一眼看到欠账。 */}
-            <div className="lib-scope" role="tablist" aria-label="题目列表">
+            <div className="lib-scope" role="tablist" aria-label="题目列表" ref={scopeRef}>
+                {scopeThumb && (
+                    <span
+                        className="tabs-thumb"
+                        aria-hidden="true"
+                        style={{
+                            transform: `translate3d(${scopeThumb.x}px, ${scopeThumb.y}px, 0)`,
+                            width: scopeThumb.width,
+                            height: scopeThumb.height,
+                        }}
+                    />
+                )}
                 {[
                     {key: 'library', label: '题库列表', count: null, active: !filters.needsReview && !filters.rejected && !filters.trashed},
                     {key: 'draft', label: '草稿箱', count: scopes?.needsReview ?? null, active: filters.needsReview},
@@ -426,7 +447,11 @@ export default function Library({tree, initialSubject = '', scopes, onChanged, o
                         }}
                     >
                         {scope.label}
-                        {scope.count !== null && <span className="lib-scope-count">{scope.count}</span>}
+                        {scope.count !== null && (
+                            <span className="lib-scope-count">
+                                <CountUp value={scope.count} duration={720}/>
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -577,7 +602,7 @@ export default function Library({tree, initialSubject = '', scopes, onChanged, o
 
             <div className="list-head">
                 <div className="list-count">
-                    共 <strong>{data.total}</strong> 道
+                    共 <strong><CountUp value={data.total} duration={900}/></strong> 道
                     {data.total > 0 && (
                         <span className="muted">
                             {' '}
@@ -939,7 +964,13 @@ export default function Library({tree, initialSubject = '', scopes, onChanged, o
                     onClose={() => setEditing(null)}
                     onSaved={async (id) => {
                         await refreshAll();
-                        if (detailId) setDetailId(id);
+                        // 编辑同一道题时 setDetailId 是同值，effect 不会重跑，详情会一直是
+                        // 保存前的旧数据——新加的配图 / 知识点看起来就像"没保存"。必须主动重拉。
+                        if (detailId) {
+                            getQuestion(id)
+                                .then(setDetail)
+                                .catch(() => setDetailId(id));
+                        }
                     }}
                 />
             )}

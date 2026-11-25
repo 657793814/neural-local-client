@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react';
 import {syncLogin, syncLogout, syncPull, syncPush, syncRetry, syncStatus} from '../lib/api.js';
 import {Card, Empty, Field, PageHead, Pill, confirmDialog, notify} from '../components/ui.jsx';
+import {CountUp} from '../components/effects.jsx';
 
 export default function SyncPage({onChanged}) {
     const [status, setStatus] = useState(null);
@@ -135,15 +136,15 @@ export default function SyncPage({onChanged}) {
                     >
                         <div className="sync-grid">
                             <div className="sync-stat">
-                                <strong>{status.pending}</strong>
+                                <strong><CountUp value={status.pending}/></strong>
                                 <span>待推送</span>
                             </div>
                             <div className="sync-stat">
-                                <strong>{status.failed}</strong>
+                                <strong><CountUp value={status.failed}/></strong>
                                 <span>失败</span>
                             </div>
                             <div className="sync-stat">
-                                <strong>{status.synced}</strong>
+                                <strong><CountUp value={status.synced}/></strong>
                                 <span>已同步</span>
                             </div>
                         </div>

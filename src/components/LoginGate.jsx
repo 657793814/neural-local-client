@@ -53,7 +53,14 @@ export default function LoginGate({auth, onUnlocked}) {
 
     return (
         <div className="gate">
-            <form className="gate-card" onSubmit={submit}>
+            <div className="gate-aurora" aria-hidden="true">
+                <i/><i/><i/><i/>
+            </div>
+            <form className="gate-card liquid" onSubmit={submit}>
+                <span className="liquid-caustics" aria-hidden="true"/>
+                <span className="liquid-sheen" aria-hidden="true"/>
+                <span className="liquid-specular" aria-hidden="true"/>
+                <span className="liquid-edge" aria-hidden="true"/>
                 <div className="gate-brand">
                     <BrandMark/>
                     <div>

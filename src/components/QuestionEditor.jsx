@@ -37,6 +37,11 @@ function toForm(question, defaultSubjectId, tree) {
         difficulty: question?.difficulty || 3,
         tags: (question?.tags || []).join('；'),
         knowledgeIds: (question?.knowledge || []).map((point) => point.id),
+        // 编辑器初开时 tree 可能还没刷新到新建的知识点，带上题目自带的名字，
+        // 避免名字解析失败时把 id 当成名字显示出来（一串字符）。
+        knowledgeNames: Object.fromEntries(
+            (question?.knowledge || []).map((point) => [point.id, point.name]),
+        ),
         source: question?.source || '',
         year: question?.year || '',
         reviewed: false,
@@ -280,6 +285,7 @@ export function QuestionEditor({question, tree, defaultSubjectId, onClose, onSav
                         tree={tree}
                         subjectId={form.subjectId}
                         value={form.knowledgeIds}
+                        knownNames={form.knowledgeNames}
                         onChange={(ids) => update({knowledgeIds: ids})}
                         onCreate={(name) => knowledgePointCreate(form.subjectId, name)}
                     />

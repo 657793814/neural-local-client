@@ -8,6 +8,7 @@ import {
     scoreSave,
 } from '../lib/api.js';
 import {Card, Empty, Field, Modal, PageHead, Pill, confirmDialog, notify} from '../components/ui.jsx';
+import {CountUp} from '../components/effects.jsx';
 import {cx} from '../lib/format.js';
 import {parseScoreImport} from '../lib/scoreImport.js';
 
@@ -444,37 +445,37 @@ export default function Scores({onGo, onChanged}) {
                 <>
                     <div className="sc-kpis">
                         <div className="sc-kpi">
-                            <b>{stats.average == null ? '—' : fmt(stats.average)}</b>
+                            <b><CountUp value={stats.average == null ? '—' : fmt(stats.average)}/></b>
                             <span>平均分</span>
                         </div>
                         <div className="sc-kpi">
-                            <b>{stats.median == null ? '—' : fmt(stats.median)}</b>
+                            <b><CountUp value={stats.median == null ? '—' : fmt(stats.median)}/></b>
                             <span>中位数</span>
                         </div>
                         <div className="sc-kpi">
-                            <b>{stats.highest == null ? '—' : fmt(stats.highest)}</b>
+                            <b><CountUp value={stats.highest == null ? '—' : fmt(stats.highest)}/></b>
                             <span>最高</span>
                         </div>
                         <div className="sc-kpi">
-                            <b>{stats.lowest == null ? '—' : fmt(stats.lowest)}</b>
+                            <b><CountUp value={stats.lowest == null ? '—' : fmt(stats.lowest)}/></b>
                             <span>最低</span>
                         </div>
                         <div className="sc-kpi">
-                            <b>{stats.passRate == null ? '—' : `${Math.round(stats.passRate)}%`}</b>
+                            <b><CountUp value={stats.passRate == null ? '—' : `${Math.round(stats.passRate)}%`}/></b>
                             <span>及格率</span>
                             <em>
                                 {stats.pass} / {stats.entered}
                             </em>
                         </div>
                         <div className="sc-kpi">
-                            <b>{stats.goodRate == null ? '—' : `${Math.round(stats.goodRate)}%`}</b>
+                            <b><CountUp value={stats.goodRate == null ? '—' : `${Math.round(stats.goodRate)}%`}/></b>
                             <span>优秀率</span>
                             <em>
                                 {stats.good} / {stats.entered}
                             </em>
                         </div>
                         <div className="sc-kpi">
-                            <b>{stats.missing}</b>
+                            <b><CountUp value={stats.missing}/></b>
                             <span>缺考 / 未录</span>
                         </div>
                     </div>

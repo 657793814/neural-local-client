@@ -63,7 +63,7 @@ export default function Wizard({boot, tree, onDone}) {
                 <ol className="wizard-steps">
                     {STEPS.map((label, index) => (
                         <li key={label} className={index === step ? 'active' : index < step ? 'done' : ''}>
-                            <span>{index + 1}</span>
+                            <span>{index < step ? <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg> : index + 1}</span>
                             {label}
                         </li>
                     ))}

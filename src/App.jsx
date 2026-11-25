@@ -2,6 +2,8 @@ import {useCallback, useEffect, useState} from 'react';
 import {listen} from '@tauri-apps/api/event';
 import {authLogout, bootstrap, curriculum, syncStatus} from './lib/api.js';
 import {FeedbackHost, Loading} from './components/ui.jsx';
+import {CountUp} from './components/effects.jsx';
+import {attachPointerEffects} from './lib/motion.js';
 import BrandMark from './components/BrandMark.jsx';
 import {ImageLightbox} from './components/ImageLightbox.jsx';
 import LoginGate from './components/LoginGate.jsx';
@@ -49,6 +51,8 @@ const ICON = {
     about: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13.2a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3ZM12 12v5.2',
     logout: 'M10 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4m4-4 3-3-3-3m3 3H9',
     chevron: 'm7 10 5 5 5-5',
+    sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M2 12h2m16 0h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
+    moon: 'M20.2 14.5A8.5 8.5 0 0 1 9.5 3.8a8.5 8.5 0 1 0 10.7 10.7Z',
 };
 
 function NavIcon({name}) {
@@ -77,7 +81,17 @@ const NAV = [
 ];
 
 const NAV_ORDER_KEY = 'neuralkb.nav.order.v1';
+const THEME_KEY = 'neuralkb.theme.v1';
 const DEFAULT_ORDER = NAV.map((item) => item.key);
+
+/** 主题只影响界面明暗，与数据无关；读取失败时保持浅色。 */
+function loadTheme() {
+    try {
+        return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+    } catch {
+        return 'light';
+    }
+}
 
 /** 读用户拖过的菜单顺序；没有记录或记录里有新菜单（如插件项）时补齐默认位。 */
 function loadNavOrder() {
@@ -130,6 +144,7 @@ export default function App() {
     const [accountOpen, setAccountOpen] = useState(false);
     const [syncPending, setSyncPending] = useState(0);
     const [navOrder, setNavOrderState] = useState(loadNavOrder);
+    const [theme, setTheme] = useState(loadTheme);
     // 全局热键：即使听写台没打开，也把它带过去并送一个推进信号。
     const [dictationNextTick, setDictationNextTick] = useState(0);
     const [dictationRepeatTick, setDictationRepeatTick] = useState(0);
@@ -147,12 +162,24 @@ export default function App() {
         }
     };
 
+    const loadTree = useCallback(async () => {
+        try {
+            setTree(await curriculum());
+        } catch (err) {
+            setError(err.message);
+        }
+    }, []);
+
     const refresh = useCallback(async () => {
         try {
             const data = await bootstrap();
             setBoot(data);
             setAuth(data.auth);
             setShowWizard(!data.wizardDone);
+            // 题库里可以当场新建知识点。数据变更后必须同步刷新教材树，否则新建的
+            // 知识点只存在于库里、不在 tree 中，重新打开编辑器时名字解析不出来，
+            // 会被当成 id 显示成一串字符。
+            await loadTree();
             // 待同步数量只在左下角菜单里露一个数字，读不到就算了。
             syncStatus()
                 .then((status) => setSyncPending(status.pending || 0))
@@ -162,26 +189,30 @@ export default function App() {
             setError(err.message);
             return null;
         }
-    }, []);
-
-    const loadTree = useCallback(async () => {
-        try {
-            setTree(await curriculum());
-        } catch (err) {
-            setError(err.message);
-        }
-    }, []);
+    }, [loadTree]);
 
     useEffect(() => {
         refresh();
-        loadTree();
-    }, [refresh, loadTree]);
+    }, [refresh]);
 
     useEffect(() => {
         const onHash = () => setRoute(parseHash());
         window.addEventListener('hashchange', onHash);
         return () => window.removeEventListener('hashchange', onHash);
     }, []);
+
+    useEffect(() => {
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        try {
+            localStorage.setItem(THEME_KEY, theme);
+        } catch {
+            // 隐私模式等存不进去：本次会话仍然生效。
+        }
+    }, [theme]);
+
+    // 指针特效统一挂一次：聚光灯、液态玻璃、磁吸按钮、统计卡倾斜都走这里。
+    useEffect(() => attachPointerEffects(), []);
 
     useEffect(() => {
         let cancelOne;
@@ -308,13 +339,27 @@ export default function App() {
     return (
         <div className="app">
             <aside className="sidebar">
-                <button className="brand" onClick={() => go('library')}>
-                    <BrandMark/>
-                    <span className="brand-text">
-                        <strong>NeuralKB</strong>
-                        <small>本地题库</small>
-                    </span>
-                </button>
+                <div className="brand-row">
+                    <button className="brand" onClick={() => go('library')}>
+                        <BrandMark/>
+                        <span className="brand-text">
+                            <strong>NeuralKB</strong>
+                            <small>本地题库</small>
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        className="theme-toggle"
+                        onClick={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
+                        title={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+                        aria-label={theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'}
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d={theme === 'dark' ? ICON.sun : ICON.moon}/>
+                        </svg>
+                    </button>
+                </div>
 
                 <div className="nav-group-label">工作台</div>
                 <nav className="main-nav">
@@ -328,7 +373,7 @@ export default function App() {
                             <span className="nav-label">
                                 {item.label}
                                 {item.key === 'library' && pending > 0 && (
-                                    <span className="nav-badge">{pending}</span>
+                                    <span className="nav-badge"><CountUp value={pending} duration={720}/></span>
                                 )}
                             </span>
                             <span className="nav-hint">{item.hint}</span>
@@ -340,15 +385,15 @@ export default function App() {
 
                 <div className="sidebar-stats">
                     <div className="stat-cell">
-                        <strong>{boot.stats.total}</strong>
+                        <strong><CountUp value={boot.stats.total}/></strong>
                         <span>题目</span>
                     </div>
                     <div className="stat-cell">
-                        <strong>{boot.stats.withImages}</strong>
+                        <strong><CountUp value={boot.stats.withImages}/></strong>
                         <span>带图</span>
                     </div>
                     <div className="stat-cell">
-                        <strong className={pending ? 'hot' : ''}>{pending}</strong>
+                        <strong className={pending ? 'hot' : ''}><CountUp value={pending}/></strong>
                         <span>草稿</span>
                     </div>
                 </div>

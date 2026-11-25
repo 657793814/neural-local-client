@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>样式预览</title>
+</head>
+<body>
+<div id="root"></div>
+<script>
+    const knowledge = (name, path) => ({id: 'kp-' + name, name, path});
+
+    const questions = [
+        {
+            id: 'a1b2c3d4e5f6a7b8',
+            type: 'SINGLE',
+            difficulty: 2,
+            subjectName: '数学',
+            stem: '已知函数 $f(x)=x^3-3x+1$，则 $f(x)$ 在区间 $[-2,2]$ 上的最大值为（ ）',
+            options: [
+                {key: 'A', text: '$-1$'},
+                {key: 'B', text: '$1$'},
+                {key: 'C', text: '$3$'},
+                {key: 'D', text: '$5$'},
+            ],
+            answer: 'C',
+            analysis: '求导得 $f\'(x)=3x^2-3$，驻点为 $x=\\pm1$，比较端点与驻点函数值即可。',
+            tags: ['导数', '极值'],
+            knowledge: [knowledge('利用导数求最值', '数学 / 选择性必修二 / 导数 / 利用导数求最值')],
+            issues: [],
+            assets: [],
+            status: 'PUBLISHED',
+            needsReview: false,
+            reviewNote: null,
+            syncState: 'SYNCED',
+            updatedAt: '2026-11-19T10:22:00',
+            createdAt: '2026-11-01T09:00:00',
+        },
+        {
+            id: 'b2c3d4e5f6a7b8c9',
+            type: 'FILL',
+            difficulty: 3,
+            subjectName: '物理',
+            stem: '一物体做匀加速直线运动，初速度为 $2\\,\\mathrm{m/s}$，加速度为 $3\\,\\mathrm{m/s^2}$，则第 4 秒末的速度为 ______。',
+            options: [],
+            answer: '14 m/s',
+            analysis: '$v=v_0+at=2+3\\times4=14\\,\\mathrm{m/s}$。',
+            tags: ['匀变速直线运动'],
+            knowledge: [knowledge('速度与时间的关系', '物理 / 必修一 / 匀变速直线运动 / 速度与时间的关系')],
+            issues: [],
+            assets: [],
+            status: 'PUBLISHED',
+            needsReview: false,
+            reviewNote: null,
+            syncState: null,
+            updatedAt: '2026-11-18T16:40:00',
+            createdAt: '2026-11-02T09:00:00',
+        },
+        {
+            id: 'c3d4e5f6a7b8c9d0',
+            type: 'SOLVED',
+            difficulty: 4,
+            subjectName: '数学',
+            stem: '设数列 $\\{a_n\\}$ 满足 $a_1=1$，$a_{n+1}=2a_n+1$。\n（1）证明：$\\{a_n+1\\}$ 是等比数列；\n（2）求 $\\{a_n\\}$ 的通项公式。',
+            options: [],
+            answer: '$a_n=2^n-1$',
+            analysis: '由 $a_{n+1}+1=2(a_n+1)$ 得公比为 2 的等比数列，进而 $a_n+1=2^n$。',
+            tags: ['数列', '递推'],
+            knowledge: [knowledge('等比数列的判定', '数学 / 选择性必修二 / 数列 / 等比数列的判定')],
+            issues: ['缺考察点'],
+            assets: [],
+            status: 'DRAFT',
+            needsReview: true,
+            reviewNote: null,
+            syncState: 'PENDING',
+            updatedAt: '2026-11-17T08:12:00',
+            createdAt: '2026-11-15T09:00:00',
+        },
+        {
+            id: 'd4e5f6a7b8c9d0e1',
+            type: 'MULTI',
+            difficulty: 3,
+            subjectName: '化学',
+            stem: '下列离子方程式书写正确的是（ ）',
+            options: [
+                {key: 'A', text: '铁与稀盐酸反应：$2\\mathrm{Fe}+6\\mathrm{H^+}=2\\mathrm{Fe^{3+}}+3\\mathrm{H_2}\\uparrow$'},
+                {key: 'B', text: '碳酸钙与盐酸反应：$\\mathrm{CaCO_3}+2\\mathrm{H^+}=\\mathrm{Ca^{2+}}+\\mathrm{H_2O}+\\mathrm{CO_2}\\uparrow$'},
+            ],
+            answer: 'B',
+            analysis: 'A 中铁生成 $\\mathrm{Fe^{2+}}$。',
+            tags: ['离子方程式'],
+            knowledge: [knowledge('离子方程式的书写', '化学 / 必修一 / 离子反应 / 离子方程式的书写')],
+            issues: [],
+            assets: [],
+            status: 'PUBLISHED',
+            needsReview: false,
+            reviewNote: null,
+            syncState: null,
+            updatedAt: '2026-11-12T20:03:00',
+            createdAt: '2026-11-05T09:00:00',
+        },
+    ];
+
+    const curriculum = [
+        {
+            id: 'math', code: 'MATH', name: '数学',
+            textbooks: [{
+                id: 'tb-math-1', name: '选择性必修二', grade: '高二',
+                chapters: [{
+                    id: 'ch-1', name: '导数及其应用',
+                    points: [{id: 'kp-1', name: '利用导数求最值', code: 'M1', path: '数学 / 选择性必修二 / 导数及其应用 / 利用导数求最值'}],
+                }],
+            }],
+        },
+        {id: 'physics', code: 'PHYS', name: '物理', textbooks: []},
+        {id: 'chemistry', code: 'CHEM', name: '化学', textbooks: []},
+    ];
+
+    const gatePreview = new URLSearchParams(location.search).get('gate') === '1';
+    const bootstrap = {
+        dataDir: '/Users/demo/Documents/NeuralKB-Local',
+        dbPath: '/Users/demo/Documents/NeuralKB-Local/neuralkb.db',
+        hasData: true,
+        wizardDone: new URLSearchParams(location.search).get('wizard') !== '1',
+        searchMode: 'fts',
+        stats: {
+            total: 1284, draft: 37, needsReview: 12, rejected: 3, trashed: 2, withImages: 486,
+            subjects: [], updatedAt: '2026-11-19T10:22:00',
+        },
+        models: 2,
+        appVersion: '0.1.0',
+        platform: 'macos',
+        auth: gatePreview ? {
+            hasUser: false, unlocked: false, username: '',
+            displayName: '', bio: '', createdAt: null,
+        } : {
+            hasUser: true, unlocked: true, username: 'liu',
+            displayName: '刘老师', bio: '', createdAt: '2026-10-01T09:00:00',
+        },
+    };
+
+    const handlers = {
+        bootstrap: () => bootstrap,
+        sync_status: () => ({pending: 4}),
+        curriculum: () => curriculum,
+        question_list: (args) => ({items: questions, total: 1284, page: 1, size: args?.query?.size || 20}),
+        tag_list: () => [
+            {tag: '导数', count: 128}, {tag: '数列', count: 96}, {tag: '离子方程式', count: 74},
+            {tag: '匀变速直线运动', count: 61}, {tag: '极值', count: 55}, {tag: '圆锥曲线', count: 48},
+        ],
+        question_sources: () => [
+            {source: '2026 届高三一模', count: 82}, {source: '校本作业', count: 64},
+        ],
+        question_get: (args) => questions.find((item) => item.id === args?.id) || questions[0],
+        list_models: () => [],
+        get_routes: () => ({purposes: [], routes: {}}),
+        setting_get_value: () => '',
+        storage_usage: () => ({
+            total: {bytes: 24576000, files: 128},
+            diskTotal: 500000000000, diskFree: 120000000000,
+            assets: {bytes: 12582912, files: 64}, assetsQuestions: 18,
+            orphanFiles: 3, orphanBytes: 204800,
+            tmp: {bytes: 1048576, files: 12}, tmpPinned: 0,
+            db: {bytes: 5242880, files: 1},
+            backups: {bytes: 5242880, files: 2},
+            other: {bytes: 524288, files: 49},
+        }),
+        question_stats: () => {
+            const single = new URLSearchParams(location.search).get('subject') === 'math';
+            if (single) return {
+                total: 642, published: 588, draft: 54, needsReview: 5, linked: 596, unlinked: 46,
+                pointsTotal: 180, pointsCovered: 94, subjectsCovered: 1, subjectsTotal: 1,
+                chaptersTotal: 23, chaptersCovered: 9, singleSubject: true, recent30: 34,
+                bySubject: [{key: 'math', label: '数学', count: 642}],
+                byChapter: [
+                    {key: 'ch-1', label: '第二十二章 二次函数', count: 22},
+                    {key: 'ch-2', label: '第一章 集合与常用逻辑用语', count: 8},
+                ],
+                byPoint: [
+                    {key: 'p1', label: '二次函数的性质', count: 17},
+                    {key: 'p2', label: '不等式性质', count: 11},
+                    {key: 'p3', label: '函数的导数', count: 10},
+                    {key: 'p4', label: '基本不等式', count: 10},
+                    {key: 'p5', label: '双曲线的离心率', count: 9},
+                    {key: 'p6', label: '三角形的边角关系', count: 8},
+                    {key: 'p7', label: '复数的模与轨迹', count: 8},
+                    {key: 'p8', label: '余弦定理与二倍角公式', count: 8},
+                    {key: 'p9', label: '抛物线的定义与性质', count: 8},
+                    {key: 'p10', label: '第一章 有理数的加减混合运算（超长考点名占位）', count: 7},
+                    {key: 'p11', label: '双曲线的几何性质', count: 7},
+                    {key: 'p12', label: '解三角形', count: 7},
+                    {key: 'p13', label: '等差数列前n项和', count: 7},
+                    {key: 'p14', label: '直线与抛物线的位置关系', count: 7},
+                    {key: 'p15', label: '函数的奇偶性', count: 7},
+                    {key: 'p16', label: '指数与指数函数', count: 6},
+                    {key: 'p17', label: '集合的交集运算', count: 6},
+                    {key: 'p18', label: '向量的数量积与夹角', count: 6},
+                ],
+                byType: [
+                    {key: 'SINGLE', label: '单选题', count: 312},
+                    {key: 'MULTI', label: '多选题', count: 118},
+                    {key: 'FILL', label: '填空题', count: 138},
+                    {key: 'SOLVED', label: '解答题', count: 74},
+                ],
+                byDifficulty: [
+                    {key: '1', label: '1 · 很容易', count: 48},
+                    {key: '2', label: '2 · 容易', count: 142},
+                    {key: '3', label: '3 · 中等', count: 256},
+                    {key: '4', label: '4 · 较难', count: 151},
+                    {key: '5', label: '5 · 很难', count: 45},
+                ],
+                months: [
+                    {key: '2026-06', label: '6月', count: 42},
+                    {key: '2026-07', label: '7月', count: 63},
+                    {key: '2026-08', label: '8月', count: 49},
+                    {key: '2026-09', label: '9月', count: 82},
+                    {key: '2026-10', label: '10月', count: 104},
+                    {key: '2026-11', label: '11月', count: 34},
+                ],
+                emptyChapters: [],
+                emptyPoints: [
+                    {key: 'e1', label: '实数与运算', count: 0},
+                    {key: 'e2', label: '绝对值与数轴', count: 0},
+                    {key: 'e3', label: '整式与因式分解', count: 0},
+                    {key: 'e4', label: '分式与分式方程', count: 0},
+                    {key: 'e5', label: '科学记数法与近似数', count: 0},
+                    {key: 'e6', label: '二元一次方程组', count: 0},
+                ],
+                suggestions: [
+                    {level: 'mid', title: '解答题占比偏低', detail: '解答题只占 12%，月考卷的压轴题不够用。', action: 'generate', subjectId: 'math', types: ['SOLVED'], difficulty: 4},
+                ],
+            };
+            return {
+            total: 1284, published: 1163, draft: 121, needsReview: 12, linked: 1108, unlinked: 176,
+            pointsTotal: 486, pointsCovered: 352, subjectsCovered: 3, subjectsTotal: 4,
+            chaptersTotal: 48, chaptersCovered: 31, singleSubject: false, recent30: 68,
+            bySubject: [
+                {key: 'math', label: '数学', count: 642},
+                {key: 'physics', label: '物理', count: 386},
+                {key: 'chemistry', label: '化学', count: 256},
+                {key: 'biology', label: '生物', count: 0},
+            ],
+            byChapter: [
+                {key: 'ch-1', label: '导数及其应用', count: 128},
+                {key: 'ch-2', label: '数列', count: 96},
+            ],
+            byType: [
+                {key: 'SINGLE', label: '单选题', count: 612},
+                {key: 'MULTI', label: '多选题', count: 238},
+                {key: 'FILL', label: '填空题', count: 274},
+                {key: 'SOLVED', label: '解答题', count: 160},
+            ],
+            byDifficulty: [
+                {key: '1', label: '1 · 很容易', count: 96},
+                {key: '2', label: '2 · 容易', count: 284},
+                {key: '3', label: '3 · 中等', count: 512},
+                {key: '4', label: '4 · 较难', count: 302},
+                {key: '5', label: '5 · 很难', count: 90},
+            ],
+            months: [
+                {key: '2026-06', label: '6月', count: 84},
+                {key: '2026-07', label: '7月', count: 126},
+                {key: '2026-08', label: '8月', count: 98},
+                {key: '2026-09', label: '9月', count: 164},
+                {key: '2026-10', label: '10月', count: 208},
+                {key: '2026-11', label: '11月', count: 68},
+            ],
+            emptyChapters: [
+                {subjectId: 'biology', subject: '生物', chapter: '细胞的能量供应', count: 0},
+                {subjectId: 'math', subject: '数学', chapter: '概率与统计', count: 0},
+            ],
+            byPoint: [],
+            emptyPoints: [],
+            suggestions: [
+                {level: 'high', title: '生物还没有题', detail: '组卷时选不到生物题，建议先补 20 道基础题。', action: 'generate', subjectId: 'biology', types: ['SINGLE'], difficulty: 2},
+                {level: 'mid', title: '解答题占比偏低', detail: '解答题只占 12%，月考卷的压轴题不够用。', action: 'generate', subjectId: 'math', types: ['SOLVED'], difficulty: 4},
+                {level: 'low', title: '176 道题没有挂知识点', detail: '这些题不会进入章节覆盖与学情统计。', action: 'library', subjectId: null, types: [], difficulty: null},
+            ],
+            };
+        },
+        'plugin:event|listen': () => 1,
+    };
+
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
+
+    window.__TAURI_INTERNALS__ = {
+        invoke: async (cmd, args) => {
+            const handler = handlers[cmd];
+            if (!handler) return [];
+            return handler(args);
+        },
+        transformCallback: (cb) => cb,
+        metadata: {currentWindow: {label: 'main'}, currentWebview: {label: 'main'}},
+    };
+</script>
+<script type="module" src="/src/main.jsx"></script>
+<script>
+    const shot = new URLSearchParams(location.search).get('shot');
+    const clickText = (text) => {
+        const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === text);
+        button?.click();
+        return !!button;
+    };
+    if (shot) {
+        const timer = setInterval(() => {
+            if (!document.querySelector('.q-card')) return;
+            clearInterval(timer);
+            if (shot === 'confirm') {
+                document.querySelector('.q-card input[type=checkbox]').click();
+                setTimeout(() => clickText('删除'), 150);
+            } else if (shot === 'new') {
+                clickText('新建题目');
+            } else if (shot === 'paper') {
+                location.hash = '#/papers';
+                setTimeout(() => clickText('新建试卷'), 400);
+            } else if (shot === 'design') {
+                clickText('试卷设计');
+            }
+        }, 100);
+    }
+</script>
+</body>
+</html>

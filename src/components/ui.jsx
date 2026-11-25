@@ -1,5 +1,6 @@
-import {useEffect, useReducer, useRef, useState} from 'react';
+import {useCallback, useEffect, useReducer, useRef, useState} from 'react';
 import {cx} from '../lib/format.js';
+import {DecodeText, CountUp, useSlidingThumb} from './effects.jsx';
 
 // ---------------------------------------------------------------------------
 // 提示与确认：与中心系统一样统一入口，页面不再各写一套。
@@ -29,14 +30,51 @@ export function confirmDialog(options) {
     });
 }
 
+/** 毛玻璃提示：停留 5.2s，底部进度条显示剩余时间，鼠标悬停暂停。 */
+function ToastItem({item, onDone}) {
+    const duration = item.duration || 5200;
+    const [paused, setPaused] = useState(false);
+    const remaining = useRef(duration);
+
+    useEffect(() => {
+        if (paused) return undefined;
+        const begin = Date.now();
+        const timer = setTimeout(() => onDone(item.id), remaining.current);
+        return () => {
+            clearTimeout(timer);
+            remaining.current = Math.max(200, remaining.current - (Date.now() - begin));
+        };
+    }, [paused, item.id, onDone]);
+
+    return (
+        <div
+            className={cx('toast', item.tone, paused && 'paused')}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            onClick={() => onDone(item.id)}
+            title="悬停暂停，点击关闭"
+        >
+            <span className="toast-dot" aria-hidden="true"/>
+            <span className="toast-text">{item.message}</span>
+            <span
+                className="toast-timer"
+                style={{'--toast-duration': `${duration}ms`}}
+                aria-hidden="true"
+            />
+        </div>
+    );
+}
+
 export function FeedbackHost() {
     const [items, setItems] = useState([]);
     const [confirm, setConfirm] = useState(null);
+    const removeToast = useCallback((id) => {
+        setItems((current) => current.filter((each) => each.id !== id));
+    }, []);
 
     useEffect(() => {
         const onToast = (item) => {
             setItems((current) => [...current, item]);
-            setTimeout(() => setItems((current) => current.filter((each) => each.id !== item.id)), 4200);
         };
         const onConfirm = (config) => setConfirm(config);
         toastListeners.add(onToast);
@@ -57,9 +95,7 @@ export function FeedbackHost() {
         <>
             <div className="toasts" role="status" aria-live="polite">
                 {items.map((item) => (
-                    <div key={item.id} className={`toast ${item.tone}`}>
-                        {item.message}
-                    </div>
+                    <ToastItem key={item.id} item={item} onDone={removeToast}/>
                 ))}
             </div>
             {confirm && (
@@ -93,8 +129,12 @@ export function FeedbackHost() {
 export function PageHead({title, subtitle, actions, help}) {
     return (
         <header className="page-head">
-            <div>
-                <h1>{title}</h1>
+            <div className="page-head-main">
+                <span className="page-eyebrow">
+                    <i aria-hidden="true"/>
+                    NeuralKB · Workspace
+                </span>
+                <h1><DecodeText text={title}/></h1>
                 {subtitle && <p>{subtitle}</p>}
             </div>
             <div className="page-actions">
@@ -109,9 +149,9 @@ export function PageHead({title, subtitle, actions, help}) {
     );
 }
 
-export function Card({title, subtitle, actions, children, className}) {
+export function Card({title, subtitle, actions, children, className, tilt}) {
     return (
-        <section className={cx('card', className)}>
+        <section className={cx('card', className)} {...(tilt ? {'data-tilt': ''} : {})}>
             {(title || actions) && (
                 <div className="card-head">
                     <div>
@@ -171,9 +211,13 @@ export function Modal({
     return (
         <div className={cx('modal-mask', maskClassName)} onMouseDown={onClose}>
             <div
-                className={cx('modal', wide && 'wide', small && 'small', xwide && 'xwide')}
+                className={cx('modal liquid', wide && 'wide', small && 'small', xwide && 'xwide')}
                 onMouseDown={(event) => event.stopPropagation()}
             >
+                <span className="liquid-caustics" aria-hidden="true"/>
+                <span className="liquid-sheen" aria-hidden="true"/>
+                <span className="liquid-specular" aria-hidden="true"/>
+                <span className="liquid-edge" aria-hidden="true"/>
                 <div className="modal-head">
                     <div>
                         <h3>{title}</h3>
@@ -193,7 +237,14 @@ export function Modal({
 export function Drawer({title, subtitle, onClose, children, footer}) {
     return (
         <div className="drawer-mask" onMouseDown={onClose}>
-            <aside className="drawer" onMouseDown={(event) => event.stopPropagation()}>
+            <aside
+                className="drawer liquid"
+                onMouseDown={(event) => event.stopPropagation()}
+            >
+                <span className="liquid-caustics" aria-hidden="true"/>
+                <span className="liquid-sheen" aria-hidden="true"/>
+                <span className="liquid-specular" aria-hidden="true"/>
+                <span className="liquid-edge" aria-hidden="true"/>
                 <div className="modal-head">
                     <div>
                         <h3>{title}</h3>
@@ -222,8 +273,20 @@ export function Progress({value, label}) {
 }
 
 export function Tabs({items, value, onChange}) {
+    const [ref, thumb] = useSlidingThumb(value);
     return (
-        <div className="tabs" role="tablist">
+        <div className="tabs" role="tablist" ref={ref}>
+            {thumb && (
+                <span
+                    className="tabs-thumb"
+                    aria-hidden="true"
+                    style={{
+                        transform: `translate3d(${thumb.x}px, ${thumb.y}px, 0)`,
+                        width: thumb.width,
+                        height: thumb.height,
+                    }}
+                />
+            )}
             {items.map((item) => (
                 <button
                     key={item.value}
@@ -233,7 +296,11 @@ export function Tabs({items, value, onChange}) {
                     onClick={() => onChange(item.value)}
                 >
                     {item.label}
-                    {item.count > 0 && <span className="tab-count">{item.count}</span>}
+                    {item.count > 0 && (
+                        <span className="tab-count">
+                            <CountUp value={item.count} duration={720}/>
+                        </span>
+                    )}
                 </button>
             ))}
         </div>

@@ -70,10 +70,16 @@ pub struct Stats {
     pub recent30: i64,
     pub by_subject: Vec<Bucket>,
     pub by_chapter: Vec<Bucket>,
+    /// 单学科口径下的知识点分布：按挂题量降序，只留有题的考点。
+    /// 章节名（"第一章 …"）来自教材目录快照，跟实际挂题的考点对不齐；
+    /// 用户看结构时真正关心的是"哪些考点有题"，所以主图改用知识点。
+    pub by_point: Vec<Bucket>,
     pub by_type: Vec<Bucket>,
     pub by_difficulty: Vec<Bucket>,
     pub months: Vec<Bucket>,
     pub empty_chapters: Vec<ChapterGap>,
+    /// 没题的考点：补题时按这个挑，比空章节更贴近实际编排。
+    pub empty_points: Vec<Bucket>,
     pub suggestions: Vec<Suggestion>,
 }
 
@@ -213,6 +219,8 @@ pub fn collect(conn: &Connection, subjects: &[String]) -> Result<Stats, String> 
     let chapters_total = chapter_total(conn, subjects)?;
     let chapters_covered = (chapters_total - empty_chapters.len() as i64).max(0);
     let by_chapter = chapter_buckets(conn, subjects)?;
+    let by_point = point_buckets(conn, subjects)?;
+    let empty_points = empty_points(conn, subjects)?;
     let subject_types = subject_type_matrix(conn, subjects)?;
 
     let suggestions = suggest(&Context {
@@ -245,10 +253,12 @@ pub fn collect(conn: &Connection, subjects: &[String]) -> Result<Stats, String> 
         recent30,
         by_subject,
         by_chapter,
+        by_point,
         by_type,
         by_difficulty,
         months,
         empty_chapters,
+        empty_points,
         suggestions,
     })
 }
@@ -425,6 +435,52 @@ fn chapter_buckets(conn: &Connection, subjects: &[String]) -> Result<Vec<Bucket>
             }
         })
         .collect())
+}
+
+/// 选中范围内有题的知识点，按题量降序。
+/// 只列有题的考点：教材目录里那堆"第一章 …"的空章对看结构没帮助，
+/// 真正要补的缺口放到「还没题的考点」里单独说。
+fn point_buckets(conn: &Connection, subjects: &[String]) -> Result<Vec<Bucket>, String> {
+    let sql = format!(
+        "select kp.id, kp.name, count(distinct q.id) as n \
+         from knowledge_point kp \
+         join question_knowledge qk on qk.knowledge_point_id = kp.id \
+         join question q on q.id = qk.question_id and q.deleted_at is null \
+         where 1=1{} \
+         group by kp.id, kp.name \
+         order by n desc, kp.name",
+        filter_clause(subjects, "kp.subject_id")
+    );
+    rows(conn, &sql, subjects, |row| {
+        Ok(Bucket {
+            key: row.get(0)?,
+            label: row.get(1)?,
+            count: row.get(2)?,
+        })
+    })
+}
+
+/// 一道题都没有的考点：单学科口径下补题时的首选清单。
+/// 用 not exists 而不是 count=0 的 left join，避免同一考点挂多道题时的重复计数干扰。
+fn empty_points(conn: &Connection, subjects: &[String]) -> Result<Vec<Bucket>, String> {
+    let sql = format!(
+        "select kp.id, kp.name, 0 \
+         from knowledge_point kp \
+         where 1=1{} \
+           and not exists (\
+             select 1 from question_knowledge qk \
+             join question q on q.id = qk.question_id and q.deleted_at is null \
+             where qk.knowledge_point_id = kp.id) \
+         order by kp.sort, kp.name",
+        filter_clause(subjects, "kp.subject_id")
+    );
+    rows(conn, &sql, subjects, |row| {
+        Ok(Bucket {
+            key: row.get(0)?,
+            label: row.get(1)?,
+            count: 0,
+        })
+    })
 }
 
 /// (学科, 题型) → 题数。缺哪类题型只能按学科单独看，光看总数看不出来。

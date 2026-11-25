@@ -21,6 +21,7 @@ export function KnowledgePicker({
     value = [],
     subjectId,
     max = 6,
+    knownNames = {},
     onChange,
     onCreate,
 }) {
@@ -88,7 +89,10 @@ export function KnowledgePicker({
     };
 
     const full = value.length >= max;
-    const nameOf = (id) => merged.find((entry) => entry.id === id)?.name || id;
+    // 名字解析三级兜底：本次新建 > 当前教材树 > 题目存下来的名字。
+    // 新建的知识点可能还没进 tree，此时若直接回退显示 id，就会变成一串字符。
+    const nameOf = (id) =>
+        merged.find((entry) => entry.id === id)?.name || knownNames[id] || id;
 
     const exact = merged.find(
         (entry) => entry.name.trim().toLowerCase() === q && entry.own,

@@ -1,4 +1,5 @@
 import {useMemo, useState} from 'react';
+import {DecodeText} from '../components/effects.jsx';
 import quickStart from '../help/quick-start.md?raw';
 import account from '../help/account.md?raw';
 import library from '../help/library.md?raw';
@@ -45,6 +46,11 @@ export const DOCS = [
 ];
 
 const GROUP_OF = Object.fromEntries(GROUPS.map((group) => [group.key, group]));
+
+/** 解码动画只吃纯文本，先把行内标记剥掉，避免把 ** 或反引号也当成字符去抖。 */
+function stripInline(text) {
+    return String(text).replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1');
+}
 
 function inline(text, keyPrefix) {
     const nodes = [];
@@ -154,7 +160,7 @@ function renderMarkdown(source) {
         if (heading) {
             flushList();
             const level = heading[1].length;
-            const content = inline(heading[2], `h${blocks.length}`);
+            const content = <DecodeText text={stripInline(heading[2])}/>;
             const key = `h-${blocks.length}`;
             if (level === 1 && firstHeading) {
                 firstHeading = false;
@@ -216,7 +222,7 @@ function HelpHome() {
             <section className="help-hero">
                 <div className="help-hero-copy">
                     <span className="help-hero-tag">离线文档 · 随安装包提供</span>
-                    <h2>从这里开始</h2>
+                    <h2><DecodeText text="从这里开始"/></h2>
                     <p>所有说明都打包在这台电脑上，断网也能查。选一个主题慢慢看，或用右上角的搜索框直接找关键词。</p>
                 </div>
                 <div className="help-hero-links">
@@ -228,7 +234,7 @@ function HelpHome() {
             {GROUPS.map((group) => (
                 <section className="help-group card" key={group.key}>
                     <header className="help-group-head">
-                        <h2>{group.label}</h2>
+                        <h2><DecodeText text={group.label}/></h2>
                         <span>{group.desc}</span>
                     </header>
                     <div className="help-topic-grid">
@@ -264,8 +270,12 @@ export default function Help({slug}) {
     return (
         <div className="page help-page">
             <header className="page-head">
-                <div>
-                    <h1>帮助</h1>
+                <div className="page-head-main">
+                    <span className="page-eyebrow">
+                        <i aria-hidden="true"/>
+                        NeuralKB · Workspace
+                    </span>
+                    <h1><DecodeText text="帮助"/></h1>
                     <p>内容随安装包离线提供，不依赖外网文档</p>
                 </div>
                 <div className="page-actions">
@@ -354,7 +364,7 @@ export default function Help({slug}) {
                                 {prev ? (
                                     <a href={`#/help/${prev.slug}`}>
                                         <small>← 上一篇</small>
-                                        <strong>{prev.title}</strong>
+                                        <strong><DecodeText text={prev.title}/></strong>
                                     </a>
                                 ) : (
                                     <span/>
@@ -362,7 +372,7 @@ export default function Help({slug}) {
                                 {next && (
                                     <a className="next" href={`#/help/${next.slug}`}>
                                         <small>下一篇 →</small>
-                                        <strong>{next.title}</strong>
+                                        <strong><DecodeText text={next.title}/></strong>
                                     </a>
                                 )}
                             </div>

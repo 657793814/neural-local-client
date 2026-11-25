@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {classList, insightsClass, insightsRoster} from '../lib/api.js';
 import {Card, Empty, PageHead, Tabs} from '../components/ui.jsx';
+import {CountUp} from '../components/effects.jsx';
 import {cx} from '../lib/format.js';
 import {RichInline} from '../lib/Math.jsx';
 import StudentInsight from './StudentInsight.jsx';
@@ -318,7 +319,7 @@ function Kpi({label, value, unit, hint, tone, action}) {
         <div className={cx('ins-kpi', tone && `t-${tone}`)}>
             <span className="ins-kpi-label">{label}</span>
             <div className="ins-kpi-value">
-                <b>{value}</b>
+                <b><CountUp value={value}/></b>
                 <em>{unit}</em>
             </div>
             <span className="ins-kpi-hint">{hint}</span>
